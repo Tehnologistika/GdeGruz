@@ -9,11 +9,12 @@ import db
 
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.filters import CommandStart
+from aiogram.filters import CommandStart, Command
 from dotenv import load_dotenv
 
 from .handlers.start import start
 from .handlers.location import router as location_router
+from .handlers.redeploy import redeploy
 
 load_dotenv()
 
@@ -24,6 +25,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
+ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 
 
 async def remind_once_a_day(bot: Bot) -> None:
@@ -97,6 +99,7 @@ async def main() -> None:
     dp = Dispatcher(storage=MemoryStorage())
 
     dp.message.register(start, CommandStart())
+    dp.message.register(redeploy, Command("redeploy"))
     dp.include_router(location_router)
 
     asyncio.create_task(remind_once_a_day(bot))
