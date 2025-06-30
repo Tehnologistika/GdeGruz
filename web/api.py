@@ -2,9 +2,14 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
-from db import get_last_point
+from db import get_last_point, init
 
 app = FastAPI()
+
+
+@app.on_event("startup")
+async def startup() -> None:
+    await init()
 
 templates = Jinja2Templates(directory="templates")
 
