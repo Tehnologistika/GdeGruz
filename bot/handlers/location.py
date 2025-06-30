@@ -23,7 +23,7 @@ async def handle_location(msg: Message):
     if GROUP_CHAT_ID:
         bot: Bot = msg.bot
         phone = await get_phone(user_id)
-        caption = f"📞 {phone}" if phone else f\"Водитель {user_id}\"
+        caption = f"📞 {phone}" if phone else f"Водитель {user_id}"
         try:
             await bot.send_location(GROUP_CHAT_ID, lat, lon, disable_notification=True)
             await bot.send_message(GROUP_CHAT_ID, caption, disable_notification=True)
