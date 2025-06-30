@@ -1,4 +1,3 @@
-
 from aiogram.types import ReplyKeyboardMarkup
 from aiogram.utils.keyboard import ReplyKeyboardBuilder
 
@@ -18,4 +17,15 @@ def main_kb() -> ReplyKeyboardMarkup:
     kb.button(text="Поделиться местоположением", request_location=True)
 
     kb.adjust(1)  # по одной кнопке в строке
+    return kb.as_markup(resize_keyboard=True)
+
+
+def location_kb() -> ReplyKeyboardMarkup:
+    """Клавиатура только с кнопкой запроса локации.
+
+    Используется после того, как водитель уже поделился номером телефона.
+    """
+    kb = ReplyKeyboardBuilder()
+    kb.button(text="Поделиться местоположением", request_location=True)
+    kb.adjust(1)
     return kb.as_markup(resize_keyboard=True)

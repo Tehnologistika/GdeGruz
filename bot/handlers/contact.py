@@ -1,6 +1,6 @@
 import logging
 
-from aiogram import F, Router
+from aiogram import F, Router, filters
 from aiogram.types import Message
 
 from db import save_phone
@@ -31,7 +31,7 @@ async def save_contact(msg: Message) -> None:
 
 
 # /help handler
-@router.message(Command("help"))
+@router.message(Command("help") | (F.text.casefold() == "помощь"))
 async def ask_help(msg: Message) -> None:
     """Водитель просит связаться. Дублируем запрос в диспетчерскую группу."""
     user = msg.from_user.id
@@ -48,4 +48,3 @@ async def ask_help(msg: Message) -> None:
             logger.warning("Не удалось отправить /help в группу: %s", e)
 
     await msg.answer("Запрос помощи отправлен диспетчеру. Оставайтесь на связи.")
-
