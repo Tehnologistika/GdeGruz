@@ -13,7 +13,7 @@ from aiogram.filters import CommandStart
 from dotenv import load_dotenv
 
 from .handlers.start import start
-from .handlers.location import location
+from .handlers.location import router as location_router
 
 load_dotenv()
 
@@ -97,7 +97,7 @@ async def main() -> None:
     dp = Dispatcher(storage=MemoryStorage())
 
     dp.message.register(start, CommandStart())
-    dp.message.register(location, lambda m: m.location is not None)
+    dp.include_router(location_router)
 
     asyncio.create_task(remind_once_a_day(bot))
     asyncio.create_task(alert_if_stale_live(bot))
