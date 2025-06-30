@@ -5,6 +5,7 @@ from aiogram import F, Router
 from aiogram.types import Message
 
 from ..storage import save_point
+from db import get_phone
 
 GROUP_CHAT_ID = int(os.getenv("GROUP_CHAT_ID", "0"))
 
@@ -26,6 +27,9 @@ async def handle_location(msg: Message) -> None:
     logger.info("Received location from %s: %s, %s", user_id, lat, lon)
     await save_point(user_id, lat, lon, msg.date)
 
+    phone = await get_phone(user_id)
+    text = f"\U0001F4DE {phone}" if phone else f"Водитель {user_id}"
+
     if GROUP_CHAT_ID:
         await msg.bot.send_location(
             GROUP_CHAT_ID,
@@ -35,7 +39,8 @@ async def handle_location(msg: Message) -> None:
         )
         await msg.bot.send_message(
             GROUP_CHAT_ID,
-            f"Водитель {user_id} • {msg.date.astimezone().isoformat(timespec='minutes')}",
+            text,
+            disable_notification=True,
         )
 
     if msg.location.live_period:
