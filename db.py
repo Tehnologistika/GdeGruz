@@ -9,6 +9,14 @@ logger = logging.getLogger(__name__)
 DB_PATH = Path("data/points.db")
 
 
+async def init() -> None:
+    """Initialize database and create missing tables."""
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    async with aiosqlite.connect(DB_PATH) as db:
+        await _ensure_schema(db)
+        await _ensure_driver_schema(db)
+
+
 async def _ensure_schema(db: aiosqlite.Connection) -> None:
     """Create table and index if they do not exist."""
     await db.execute(
@@ -31,13 +39,13 @@ async def _ensure_schema(db: aiosqlite.Connection) -> None:
     await db.commit()
 
 
-async def _ensure_phone_schema(db: aiosqlite.Connection) -> None:
-    """Create phones table if it does not exist."""
+async def _ensure_driver_schema(db: aiosqlite.Connection) -> None:
+    """Create drivers table if it does not exist."""
     await db.execute(
         """
-        CREATE TABLE IF NOT EXISTS phones (
+        CREATE TABLE IF NOT EXISTS drivers (
             user_id INTEGER PRIMARY KEY,
-            phone   TEXT NOT NULL
+            phone   TEXT
         )
         """
     )
@@ -89,14 +97,28 @@ async def save_phone(user_id: int, phone: str) -> None:
     """Persist a phone number in SQLite."""
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     async with aiosqlite.connect(DB_PATH) as db:
-        await _ensure_phone_schema(db)
+        await _ensure_driver_schema(db)
         await db.execute(
             """
-            INSERT INTO phones(user_id, phone) VALUES(?, ?)
+            INSERT INTO drivers(user_id, phone) VALUES(?, ?)
             ON CONFLICT(user_id) DO UPDATE SET phone=excluded.phone
             """,
             (user_id, phone),
         )
         await db.commit()
     logger.info("Saved phone for %s", user_id)
+
+
+async def get_phone(user_id: int) -> str | None:
+    """Fetch a driver's phone by Telegram user id."""
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    async with aiosqlite.connect(DB_PATH) as db:
+        await _ensure_driver_schema(db)
+        async with db.execute(
+            "SELECT phone FROM drivers WHERE user_id = ?",
+            (user_id,),
+        ) as cursor:
+            row = await cursor.fetchone()
+        return row[0] if row else None
+
 
