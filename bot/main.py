@@ -16,6 +16,13 @@ from .handlers.start import start
 from .handlers.location import router as location_router
 from .handlers.contact import router as contact_router
 from .handlers.redeploy import redeploy
+from datetime import datetime, timedelta, timezone
+import os
+
+from db import get_last_points, get_phone  # добавьте, если ещё нет
+
+GROUP_CHAT_ID = int(os.getenv("GROUP_CHAT_ID", "0"))
+ESCALATE_DELAY = timedelta(hours=14)
 
 load_dotenv()
 
@@ -30,39 +37,43 @@ ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 
 
 async def remind_every_12h(bot: Bot) -> None:
-    """Periodically (every 30 min) напоминает водителю нажать
-    «Поделиться местоположением», если точка не обновлялась 12 ч."""
-    while True:
+    ...
+    now = datetime.now(timezone.utc)
+    for uid in user_ids:
         try:
-            async with aiosqlite.connect(db.DB_PATH) as conn:
-                await db._ensure_schema(conn)
-                async with conn.execute("SELECT DISTINCT user_id FROM points") as cur:
-                    rows = await cur.fetchall()
-                    user_ids = [row[0] for row in rows]
+            point = await db.get_last_point(uid)
         except Exception:
-            logger.exception("Failed to fetch user list")
-            await asyncio.sleep(30 * 60)
+            ...
+            continue
+        if not point:
             continue
 
-        now = datetime.now(timezone.utc)
-        for uid in user_ids:
-            try:
-                point = await db.get_last_point(uid)
-            except Exception:
-                logger.exception("Failed to get last point for %s", uid)
-                continue
-            if not point:
-                continue
-            if now - point["ts"] > timedelta(hours=12):
-                try:
-                    await bot.send_message(
-                        uid,
-                        "Напоминание! Пожалуйста, нажмите «Поделиться местоположением»."
-                    )
-                except Exception:
-                    logger.exception("Failed to send reminder to %s", uid)
+        last_ts = point["ts"]
 
-        await asyncio.sleep(30 * 60)
+        # 1. Личное напоминание (>12 ч)
+        if now - last_ts > timedelta(hours=12):
+            try:
+                await bot.send_message(
+                    uid,
+                    "Напоминание! Пожалуйста, нажмите «Поделиться местоположением»."
+                )
+            except Exception:
+                logger.exception("Failed to send reminder to %s", uid)
+
+        # 2. Эскалация в группу (>14 ч)
+        if now - last_ts > ESCALATE_DELAY and GROUP_CHAT_ID:
+            phone = await get_phone(uid)
+            caption = (
+                f"⚠️ Нет координат от водителя 📞 {phone} с {last_ts:%d.%m %H:%M}"
+                if phone else
+                f"⚠️ Нет координат от водителя {uid} с {last_ts:%d.%m %H:%M}"
+            )
+            try:
+                await bot.send_message(GROUP_CHAT_ID, caption)
+            except Exception as e:
+                logger.warning("Не удалось отправить эскалацию: %s", e)
+
+    await asyncio.sleep(30 * 60)
 
 async def main() -> None:
     if not BOT_TOKEN:
