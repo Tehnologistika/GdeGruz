@@ -1,47 +1,33 @@
-import logging
-from datetime import datetime, timezone
-import os
-from aiogram import Bot
+from aiogram import Router, F, Bot
 from aiogram.types import Message
 
-from ..storage import save_point
-
+import os, logging
+from db import save_point, get_phone
 
 logger = logging.getLogger(__name__)
 
-# ID группы диспетчеров, куда дублируем все координаты
+router = Router()
+
 GROUP_CHAT_ID = int(os.getenv("GROUP_CHAT_ID", "0"))
 
+@router.message(F.location)
+async def handle_location(msg: Message):
+    user_id = msg.from_user.id
+    lat = msg.location.latitude
+    lon = msg.location.longitude
+    ts = msg.date
 
-async def location(message: Message) -> None:
-    """Handle incoming location messages."""
-    if not message.location:
-        return
+    await save_point(user_id, lat, lon, ts)
 
-    user_id = message.from_user.id if message.from_user else 0
-    lat = message.location.latitude
-    lon = message.location.longitude
-    ts = datetime.now(timezone.utc)
-
-    logger.info("Received location from %s: %s, %s", user_id, lat, lon)
-    await save_point(user_id=user_id, lat=lat, lon=lon, ts=ts)
-
-    # Дублируем точку в группу диспетчеров, если ID задан
+    # дублируем в группу
     if GROUP_CHAT_ID:
-        bot: Bot = message.bot
+        bot: Bot = msg.bot
+        phone = await get_phone(user_id)
+        caption = f"📞 {phone}" if phone else f\"Водитель {user_id}\"
         try:
-            await bot.send_location(
-                chat_id=GROUP_CHAT_ID,
-                latitude=lat,
-                longitude=lon,
-                disable_notification=True,
-            )
-            await bot.send_message(
-                chat_id=GROUP_CHAT_ID,
-                text=f"Водитель {user_id} • {ts.astimezone().strftime('%Y-%m-%d %H:%M')}",
-                disable_notification=True,
-            )
+            await bot.send_location(GROUP_CHAT_ID, lat, lon, disable_notification=True)
+            await bot.send_message(GROUP_CHAT_ID, caption, disable_notification=True)
         except Exception as e:
             logger.warning("Не удалось отправить точку в группу: %s", e)
 
-    await message.answer("Спасибо, местоположение сохранено!")
+    await msg.answer("Спасибо, местоположение сохранено!")
