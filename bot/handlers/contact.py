@@ -4,6 +4,7 @@ from aiogram import F, Router
 from aiogram.types import Message
 
 from db import save_phone
+from ..keyboards import location_kb
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +19,7 @@ async def save_contact(msg: Message) -> None:
     await save_phone(user, phone)
 
     await msg.answer(
-        "Спасибо! Номер сохранён — можно делиться местоположением."
+        "Спасибо! Номер сохранён — теперь делитесь местоположением каждые 12 часов.",
+        reply_markup=location_kb(),
     )
 
