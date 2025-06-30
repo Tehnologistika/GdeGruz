@@ -10,7 +10,7 @@ services:
       - STAGE=bot
     volumes:
       - ./data:/data
-    restart: unless-stopped
+    restart: always
 
   web:
     build:
@@ -24,4 +24,4 @@ services:
       - ./data:/data
     ports:
       - "8000:8000"
-    restart: unless-stopped
+    restart: always
