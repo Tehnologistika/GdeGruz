@@ -14,6 +14,7 @@ async def start(message: Message) -> ReplyKeyboardMarkup:
     await message.answer("Please share your location", reply_markup=keyboard)
     await message.answer(
         "Компания <b>Технологистика</b> желает вам счастливого пути!\n"
+        "• Сначала нажмите «Поделиться номером», потом — «Поделиться местоположением» раз в 12 ч.\n"
         "• Нажимайте «<Поделиться местоположением>» <u>каждые 24 ч</u>,\n"
         "  чтобы мы знали, где находится автомобиль.\n"
         "• Не переживайте, если забудете — бот сам напомнит.\n"
