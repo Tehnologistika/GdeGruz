@@ -122,3 +122,23 @@ async def get_phone(user_id: int) -> str | None:
         return row[0] if row else None
 
 
+
+
+async def get_last_points() -> list[tuple[int, datetime]]:
+    """Return list of (user_id, ts) where ts is the latest point timestamp per driver."""
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    async with aiosqlite.connect(DB_PATH) as db:
+        await _ensure_schema(db)
+        query = """
+            SELECT user_id, MAX(ts)
+              FROM points
+          GROUP BY user_id
+        """
+        async with db.execute(query) as cur:
+            rows = await cur.fetchall()
+        # rows: list[(uid, ts_str)]
+        return [
+            (uid, datetime.fromisoformat(ts_str))
+            for uid, ts_str in rows
+            if ts_str is not None
+        ]
