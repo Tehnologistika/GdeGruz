@@ -1,6 +1,11 @@
 import asyncio
 import logging
 import os
+from datetime import datetime, timezone, timedelta
+
+import aiosqlite
+
+import db
 
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -21,6 +26,38 @@ logger = logging.getLogger(__name__)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
+
+async def check_stale(bot: Bot) -> None:
+    """Periodically remind users to extend live location."""
+    while True:
+        try:
+            async with aiosqlite.connect(db.DB_PATH) as conn:
+                await db._ensure_schema(conn)
+                async with conn.execute("SELECT DISTINCT user_id FROM points") as cur:
+                    rows = await cur.fetchall()
+                    user_ids = [row[0] for row in rows]
+        except Exception:
+            logger.exception("Failed to fetch user list")
+            await asyncio.sleep(30 * 60)
+            continue
+
+        now = datetime.now(timezone.utc)
+        for uid in user_ids:
+            try:
+                point = await db.get_last_point(uid)
+            except Exception:
+                logger.exception("Failed to get last point for %s", uid)
+                continue
+            if not point:
+                continue
+            if now - point["ts"] > timedelta(hours=7):
+                try:
+                    await bot.send_message(uid, "Пожалуйста, продлите Live Location")
+                except Exception:
+                    logger.exception("Failed to send reminder to %s", uid)
+
+        await asyncio.sleep(30 * 60)
+
 async def main() -> None:
     if not BOT_TOKEN:
         raise RuntimeError("BOT_TOKEN is not set")
@@ -30,6 +67,8 @@ async def main() -> None:
 
     dp.message.register(start, CommandStart())
     dp.message.register(location, lambda m: m.location is not None)
+
+    asyncio.create_task(check_stale(bot))
 
     logger.info("Starting polling")
     await dp.start_polling(bot)
