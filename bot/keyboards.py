@@ -15,8 +15,10 @@ def main_kb() -> ReplyKeyboardMarkup:
     kb.button(text="Поделиться номером", request_contact=True)
     # Кнопка запроса локации
     kb.button(text="Поделиться местоположением", request_location=True)
+    # Кнопка запроса помощи
+    kb.button(text="Помощь")
 
-    kb.adjust(1)  # по одной кнопке в строке
+    kb.adjust(1, 1, 1)  # каждая кнопка в своей строке
     return kb.as_markup(resize_keyboard=True)
 
 
@@ -27,5 +29,6 @@ def location_kb() -> ReplyKeyboardMarkup:
     """
     kb = ReplyKeyboardBuilder()
     kb.button(text="Поделиться местоположением", request_location=True)
-    kb.adjust(1)
+    kb.button(text="Помощь")
+    kb.adjust(1, 1)
     return kb.as_markup(resize_keyboard=True)
