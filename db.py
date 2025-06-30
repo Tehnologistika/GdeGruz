@@ -31,6 +31,19 @@ async def _ensure_schema(db: aiosqlite.Connection) -> None:
     await db.commit()
 
 
+async def _ensure_phone_schema(db: aiosqlite.Connection) -> None:
+    """Create phones table if it does not exist."""
+    await db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS phones (
+            user_id INTEGER PRIMARY KEY,
+            phone   TEXT NOT NULL
+        )
+        """
+    )
+    await db.commit()
+
+
 async def save_point(user_id: int, lat: float, lon: float, ts: datetime) -> None:
     """Persist a location in SQLite."""
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -70,3 +83,20 @@ async def get_last_point(user_id: int):
             "lon": lon,
             "ts": datetime.fromisoformat(ts_str),
         }
+
+
+async def save_phone(user_id: int, phone: str) -> None:
+    """Persist a phone number in SQLite."""
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    async with aiosqlite.connect(DB_PATH) as db:
+        await _ensure_phone_schema(db)
+        await db.execute(
+            """
+            INSERT INTO phones(user_id, phone) VALUES(?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET phone=excluded.phone
+            """,
+            (user_id, phone),
+        )
+        await db.commit()
+    logger.info("Saved phone for %s", user_id)
+
