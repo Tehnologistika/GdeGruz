@@ -1,8 +1,13 @@
-# Use Python 3.12 slim image as the base for building dependencies
-FROM python:3.12-slim AS builder
+# Use Python 3.11 slim image as the base for building dependencies
+FROM python:3.11-slim AS builder
 
 # Set working directory
 WORKDIR /app
+
+ # Install build tools, Python headers and libraries required to compile C extensions
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential gcc libssl-dev libffi-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install dependencies first to leverage Docker layer caching
 COPY requirements.txt ./
@@ -14,7 +19,7 @@ COPY . .
 # ------------------------
 # Final runtime stage
 # ------------------------
-FROM python:3.12-slim AS runtime
+FROM python:3.11-slim AS runtime
 
 # Copy installed Python packages from the builder stage
 COPY --from=builder /root/.local /root/.local

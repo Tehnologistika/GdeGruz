@@ -1,3 +1,4 @@
 aiogram==3.0.0
-fastapi==0.110.0
+fastapi==0.103.1       # совместима с typing-extensions 4.7.*
 aiosqlite==0.19.0
+python-dotenv==1.0.1

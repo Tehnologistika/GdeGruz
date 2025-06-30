@@ -1,49 +1,47 @@
 import logging
+from datetime import datetime, timezone
 import os
-
-from aiogram import F, Router
+from aiogram import Bot
 from aiogram.types import Message
 
 from ..storage import save_point
-from db import get_phone
-
-GROUP_CHAT_ID = int(os.getenv("GROUP_CHAT_ID", "0"))
 
 
 logger = logging.getLogger(__name__)
 
-# Router that holds all location handlers
-router = Router()
+# ID группы диспетчеров, куда дублируем все координаты
+GROUP_CHAT_ID = int(os.getenv("GROUP_CHAT_ID", "0"))
 
 
-@router.message(F.location)
-@router.edited_message(F.location)
-async def handle_location(msg: Message) -> None:
-    """Handle both static and live location updates."""
-    user_id = msg.from_user.id if msg.from_user else 0
-    lat = msg.location.latitude
-    lon = msg.location.longitude
+async def location(message: Message) -> None:
+    """Handle incoming location messages."""
+    if not message.location:
+        return
+
+    user_id = message.from_user.id if message.from_user else 0
+    lat = message.location.latitude
+    lon = message.location.longitude
+    ts = datetime.now(timezone.utc)
 
     logger.info("Received location from %s: %s, %s", user_id, lat, lon)
-    await save_point(user_id, lat, lon, msg.date)
+    await save_point(user_id=user_id, lat=lat, lon=lon, ts=ts)
 
-    phone = await get_phone(user_id)
-    text = f"\U0001F4DE {phone}" if phone else f"Водитель {user_id}"
-
+    # Дублируем точку в группу диспетчеров, если ID задан
     if GROUP_CHAT_ID:
-        await msg.bot.send_location(
-            GROUP_CHAT_ID,
-            latitude=lat,
-            longitude=lon,
-            disable_notification=True,
-        )
-        await msg.bot.send_message(
-            GROUP_CHAT_ID,
-            text,
-            disable_notification=True,
-        )
+        bot: Bot = message.bot
+        try:
+            await bot.send_location(
+                chat_id=GROUP_CHAT_ID,
+                latitude=lat,
+                longitude=lon,
+                disable_notification=True,
+            )
+            await bot.send_message(
+                chat_id=GROUP_CHAT_ID,
+                text=f"Водитель {user_id} • {ts.astimezone().strftime('%Y-%m-%d %H:%M')}",
+                disable_notification=True,
+            )
+        except Exception as e:
+            logger.warning("Не удалось отправить точку в группу: %s", e)
 
-    if msg.location.live_period:
-        await msg.answer("Спасибо! Получаю вашу live-локацию.")
-    else:
-        await msg.answer("Спасибо! Точка получена.")
+    await message.answer("Спасибо, местоположение сохранено!")
