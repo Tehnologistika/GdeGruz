@@ -6,7 +6,7 @@ from aiogram.types import Message
 from db import save_phone
 
 import os
-from aiogram.filters import Command, Text
+from aiogram.filters import Command
 from db import get_phone
 
 GROUP_CHAT_ID = int(os.getenv("GROUP_CHAT_ID", "0"))
@@ -32,7 +32,7 @@ async def save_contact(msg: Message) -> None:
 
 # /help handler
 @router.message(Command("help"))
-@router.message(Text("Помощь", ignore_case=True))
+@router.message(filters.Text("Помощь", ignore_case=True))
 async def ask_help(msg: Message) -> None:
     """Водитель просит связаться. Дублируем запрос в диспетчерскую группу."""
     user = msg.from_user.id
