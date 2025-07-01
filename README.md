@@ -5,32 +5,35 @@ This repository outlines a minimal setup for a Telegram bot built with **Aiogram
 ## Project tree
 
 ```text
-app/
+.
 ├── bot/
 │   └── main.py
-├── api/
-│   ├── main.py
-│   └── templates/
-│       └── index.html
+├── web/
+│   └── api.py
+├── templates/
+│   └── map.html
+├── nginx/
+│   └── bot.conf
 ├── db.py
-Dockerfile
-docker-compose.yml
-.github/
-└── workflows/
-    └── deploy.yml
-requirements.txt
-README.md
+├── deploy.sh
+├── Dockerfile
+├── docker-compose.yml
+├── .github/
+│   └── workflows/
+│       └── deploy.yml
+├── requirements.txt
+└── README.md
 ```
 
 ## requirements.txt
 
 ```text
 aiogram==3.0.0
-fastapi==0.110.0
-uvicorn==0.29.0
+fastapi==0.103.1       # совместима с typing-extensions 4.7.*
 aiosqlite==0.19.0
-jinja2==3.1.3
 python-dotenv==1.0.1
+uvicorn==0.29.0
+jinja2==3.1.3
 ```
 
 ## Usage
