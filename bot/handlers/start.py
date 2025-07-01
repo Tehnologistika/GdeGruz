@@ -7,7 +7,7 @@ from ..keyboards import main_kb
 logger = logging.getLogger(__name__)
 
 
-async def start(message: Message) -> ReplyKeyboardMarkup:
+async def start(message: Message) -> None:
     """Handle /start command."""
     logger.info("User %s started bot", message.from_user.id if message.from_user else "unknown")
     await message.answer(
