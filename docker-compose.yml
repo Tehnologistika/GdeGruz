@@ -9,7 +9,7 @@ services:
     environment:
       - STAGE=bot
     volumes:
-      - ./data:/data
+      - ./data:/app/data
     restart: always
 
   web:
@@ -21,7 +21,7 @@ services:
     environment:
       - STAGE=web
     volumes:
-      - ./data:/data
+      - ./data:/app/data
     ports:
       - "8000:8000"
     restart: always
