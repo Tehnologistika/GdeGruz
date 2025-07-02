@@ -19,7 +19,7 @@ from .handlers.redeploy import redeploy
 from db import get_phone
 
 GROUP_CHAT_ID = int(os.getenv("GROUP_CHAT_ID", "0"))
-ESCALATE_DELAY = timedelta(hours=14)
+ESCALATE_DELAY = timedelta(hours=REMIND_HOURS + 2)
 
 # === intervals (in hours) ===
 REMIND_HOURS = float(os.getenv("REMIND_HOURS", "0.2"))  # 0.2 h ≈ 12 min for testing
@@ -64,7 +64,7 @@ async def remind_every_12h(bot: Bot) -> None:
             last_ts = point["ts"]
 
             # 1. Личное напоминание (>12 ч)
-            if now - last_ts > timedelta(hours=12):
+            if now - last_ts > timedelta(hours=REMIND_HOURS):
                 logger.info("Sending 12‑hour reminder to %s", uid)
                 try:
                     await bot.send_message(
