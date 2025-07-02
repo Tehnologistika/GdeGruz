@@ -16,13 +16,14 @@ from .handlers.start import start
 from .handlers.location import router as location_router
 from .handlers.contact import router as contact_router
 from .handlers.redeploy import redeploy
-from datetime import datetime, timedelta, timezone
-import os
-
-from db import get_last_points, get_phone  # добавьте, если ещё нет
+from db import get_phone
 
 GROUP_CHAT_ID = int(os.getenv("GROUP_CHAT_ID", "0"))
 ESCALATE_DELAY = timedelta(hours=14)
+
+# === intervals (in hours) ===
+REMIND_HOURS = float(os.getenv("REMIND_HOURS", "0.2"))  # 0.2 h ≈ 12 min for testing
+POLL_MINUTES = 30  # db polling step, default 30 min; will be overridden below for tests
 
 load_dotenv()
 
@@ -37,43 +38,58 @@ ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 
 
 async def remind_every_12h(bot: Bot) -> None:
-    ...
-    now = datetime.now(timezone.utc)
-    for uid in user_ids:
+    while True:
+        now = datetime.now(timezone.utc)
+        # fetch current list of drivers on each cycle
         try:
-            point = await db.get_last_point(uid)
-        except Exception:
-            ...
-            continue
-        if not point:
+            async with aiosqlite.connect(db.DB_PATH) as conn:
+                await db._ensure_schema(conn)
+                async with conn.execute("SELECT DISTINCT user_id FROM points") as cur:
+                    rows = await cur.fetchall()
+                    user_ids = [row[0] for row in rows]
+        except Exception as err:
+            logger.exception("Failed to fetch user list: %s", err)
+            await asyncio.sleep(POLL_MINUTES * 60)
             continue
 
-        last_ts = point["ts"]
-
-        # 1. Личное напоминание (>12 ч)
-        if now - last_ts > timedelta(hours=12):
+        for uid in user_ids:
             try:
-                await bot.send_message(
-                    uid,
-                    "Напоминание! Пожалуйста, нажмите «Поделиться местоположением»."
-                )
+                point = await db.get_last_point(uid)
             except Exception:
-                logger.exception("Failed to send reminder to %s", uid)
+                ...
+                continue
+            if not point:
+                continue
 
-        # 2. Эскалация в группу (>14 ч)
-        if now - last_ts > ESCALATE_DELAY and GROUP_CHAT_ID:
-            phone = await get_phone(uid)
-            caption = (
-                f"⚠️ Нет координат от водителя 📞 {phone} с {last_ts:%d.%m %H:%M}"
-                if phone else
-                f"⚠️ Нет координат от водителя {uid} с {last_ts:%d.%m %H:%M}"
-            )
-            try:
-                await bot.send_message(GROUP_CHAT_ID, caption)
-            except Exception as e:
-                logger.warning("Не удалось отправить эскалацию: %s", e)
+            last_ts = point["ts"]
 
-    await asyncio.sleep(30 * 60)
+            # 1. Личное напоминание (>12 ч)
+            if now - last_ts > timedelta(hours=12):
+                logger.info("Sending 12‑hour reminder to %s", uid)
+                try:
+                    await bot.send_message(
+                        uid,
+                        "Напоминание! Пожалуйста, нажмите «Поделиться местоположением»."
+                    )
+                except Exception:
+                    logger.exception("Failed to send reminder to %s", uid)
+
+            # 2. Эскалация в группу (>14 ч)
+            if now - last_ts > ESCALATE_DELAY and GROUP_CHAT_ID:
+                logger.info("Escalating: no coords from %s since %s", uid, last_ts)
+                phone = await get_phone(uid)
+                caption = (
+                    f"⚠️ Нет координат от водителя 📞 {phone} с {last_ts:%d.%m %H:%M}"
+                    if phone else
+                    f"⚠️ Нет координат от водителя {uid} с {last_ts:%d.%m %H:%M}"
+                )
+                try:
+                    await bot.send_message(GROUP_CHAT_ID, caption)
+                except Exception as e:
+                    logger.warning("Не удалось отправить эскалацию: %s", e)
+
+        # shorter sleep for testing; use REMIND_HOURS to derive minutes
+        await asyncio.sleep(max(int(REMIND_HOURS * 60), 2) * 60)
 
 async def main() -> None:
     if not BOT_TOKEN:
