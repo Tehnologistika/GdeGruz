@@ -11,8 +11,10 @@ from aiogram import Router, F, types
 from aiogram.filters import Text
 
 from bot.keyboards import help_kb  # показываем клавиатуру «Помощь»
-from bot.config import GROUP_CHAT_ID  # возьмём id группы из конфигурации
 from db import get_phone, set_active
+
+import os
+GROUP_CHAT_ID = int(os.getenv("GROUP_CHAT_ID", "0"))
 
 router = Router(name=__name__)
 
