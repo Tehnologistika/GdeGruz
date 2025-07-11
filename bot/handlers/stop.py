@@ -8,7 +8,6 @@ Handler for the “Закончить отслеживание” button.
 """
 
 from aiogram import Router, F, types
-from aiogram.filters import Text
 
 from bot.keyboards import help_kb  # показываем клавиатуру «Помощь»
 from db import get_phone, set_active
@@ -19,7 +18,7 @@ GROUP_CHAT_ID = int(os.getenv("GROUP_CHAT_ID", "0"))
 router = Router(name=__name__)
 
 
-@router.message(Text("Закончить отслеживание"))
+@router.message(F.text == "Закончить отслеживание")
 async def stop_tracking(message: types.Message):
     """
     Driver pressed “Закончить отслеживание”.
