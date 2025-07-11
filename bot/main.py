@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 from datetime import datetime, timezone, timedelta
+from dateutil.parser import isoparse      # <-- NEW
 
 import aiosqlite
 
@@ -18,12 +19,11 @@ from .handlers.contact import router as contact_router
 from .handlers.redeploy import redeploy
 from db import get_phone
 
-GROUP_CHAT_ID = int(os.getenv("GROUP_CHAT_ID", "0"))
-ESCALATE_DELAY = timedelta(hours=REMIND_HOURS + 2)
-
 # === intervals (in hours) ===
-REMIND_HOURS = float(os.getenv("REMIND_HOURS", "0.2"))  # 0.2 h ≈ 12 min for testing
-POLL_MINUTES = 30  # db polling step, default 30 min; will be overridden below for tests
+REMIND_HOURS = float(os.getenv("REMIND_HOURS", "0.2"))  # default 0.2 h ≈ 12 min
+
+GROUP_CHAT_ID = int(os.getenv("GROUP_CHAT_ID", "0"))
+ESCALATE_DELAY = timedelta(hours=REMIND_HOURS + 2)      # reminder + 2 h
 
 load_dotenv()
 
@@ -61,11 +61,12 @@ async def remind_every_12h(bot: Bot) -> None:
             if not point:
                 continue
 
-            last_ts = point["ts"]
+            # parse ISO string to aware‑UTC datetime
+            last_ts = isoparse(point["ts"]).astimezone(timezone.utc)
 
-            # 1. Личное напоминание (>12 ч)
+            # 1. Личное напоминание (>REMIND_HOURS h)
             if now - last_ts > timedelta(hours=REMIND_HOURS):
-                logger.info("Sending 12‑hour reminder to %s", uid)
+                logger.info("Sending %.2f‑hour reminder to %s", REMIND_HOURS, uid)
                 try:
                     await bot.send_message(
                         uid,
@@ -74,7 +75,7 @@ async def remind_every_12h(bot: Bot) -> None:
                 except Exception:
                     logger.exception("Failed to send reminder to %s", uid)
 
-            # 2. Эскалация в группу (>14 ч)
+            # 2. Эскалация в группу (>REMIND_HOURS + 2 h)
             if now - last_ts > ESCALATE_DELAY and GROUP_CHAT_ID:
                 logger.info("Escalating: no coords from %s since %s", uid, last_ts)
                 phone = await get_phone(uid)
