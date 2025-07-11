@@ -51,6 +51,7 @@ async def remind_every_12h(bot: Bot) -> None:
                 async with conn.execute("SELECT DISTINCT user_id FROM points") as cur:
                     rows = await cur.fetchall()
                     user_ids = [row[0] for row in rows]
+                    logger.debug("reminder-loop: users=%s (now=%s)", user_ids, now)
         except Exception as err:
             logger.exception("Failed to fetch user list: %s", err)
             await asyncio.sleep(POLL_MINUTES * 60)
@@ -65,8 +66,12 @@ async def remind_every_12h(bot: Bot) -> None:
             if not point:
                 continue
 
-            # parse ISO string to aware‑UTC datetime
-            last_ts = isoparse(point["ts"]).astimezone(timezone.utc)
+            # безопасно получаем aware-UTC timestamp
+            val = point["ts"]
+            if isinstance(val, str):
+                last_ts = isoparse(val).astimezone(timezone.utc)
+            else:  # уже datetime
+                last_ts = val.astimezone(timezone.utc)
 
             # 1. Личное напоминание (>REMIND_HOURS h)
             if now - last_ts > timedelta(hours=REMIND_HOURS):
