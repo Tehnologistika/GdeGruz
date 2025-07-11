@@ -2,7 +2,7 @@ from aiogram import Router, F, Bot
 from aiogram.types import Message
 
 import os, logging
-from db import save_point, get_phone
+from db import save_point, get_phone, is_active
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +13,10 @@ GROUP_CHAT_ID = int(os.getenv("GROUP_CHAT_ID", "0"))
 @router.message(F.location)
 async def handle_location(msg: Message):
     user_id = msg.from_user.id
+    # Пропускаем, если водитель отключил отслеживание
+    if not await is_active(user_id):
+        logger.info("ignore location from inactive driver %s", user_id)
+        return
     lat = msg.location.latitude
     lon = msg.location.longitude
     ts = msg.date

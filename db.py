@@ -40,15 +40,23 @@ async def _ensure_schema(db: aiosqlite.Connection) -> None:
 
 
 async def _ensure_driver_schema(db: aiosqlite.Connection) -> None:
-    """Create drivers table if it does not exist."""
+    """Create drivers table and `active` column if they do not exist."""
+    # base table
     await db.execute(
         """
         CREATE TABLE IF NOT EXISTS drivers (
             user_id INTEGER PRIMARY KEY,
-            phone   TEXT
+            phone   TEXT,
+            active  INTEGER NOT NULL DEFAULT 1   -- 1 = tracking on
         )
         """
     )
+    # add column to old installations (SQLite allows IF NOT EXISTS only from 3.35)
+    try:
+        await db.execute("ALTER TABLE drivers ADD COLUMN active INTEGER NOT NULL DEFAULT 1")
+    except aiosqlite.OperationalError:
+        # column already exists
+        pass
     await db.commit()
 
 
@@ -100,8 +108,8 @@ async def save_phone(user_id: int, phone: str) -> None:
         await _ensure_driver_schema(db)
         await db.execute(
             """
-            INSERT INTO drivers(user_id, phone) VALUES(?, ?)
-            ON CONFLICT(user_id) DO UPDATE SET phone=excluded.phone
+            INSERT INTO drivers(user_id, phone, active) VALUES(?, ?, 1)
+            ON CONFLICT(user_id) DO UPDATE SET phone=excluded.phone, active=1
             """,
             (user_id, phone),
         )
@@ -142,3 +150,32 @@ async def get_last_points() -> list[tuple[int, datetime]]:
             for uid, ts_str in rows
             if ts_str is not None
         ]
+
+# ---------------------------------------------------------------------------
+# tracking control helpers
+# ---------------------------------------------------------------------------
+
+async def set_active(user_id: int, flag: bool) -> None:
+    """Enable/disable tracking for a driver."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await _ensure_driver_schema(db)
+        await db.execute(
+            """
+            INSERT INTO drivers(user_id, active) VALUES(?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET active=excluded.active
+            """,
+            (user_id, int(flag)),
+        )
+        await db.commit()
+    logger.info("Set active=%s for %s", flag, user_id)
+
+
+async def is_active(user_id: int) -> bool:
+    """Return True if driver is active (default=True)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await _ensure_driver_schema(db)
+        async with db.execute(
+            "SELECT active FROM drivers WHERE user_id = ?", (user_id,)
+        ) as cur:
+            row = await cur.fetchone()
+    return bool(row[0]) if row else True
