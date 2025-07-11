@@ -17,6 +17,7 @@ from .handlers.start import start
 from .handlers.location import router as location_router
 from .handlers.contact import router as contact_router
 from .handlers.stop import router as stop_router
+from .handlers.resume import router as resume_router
 from .handlers.redeploy import redeploy
 from db import get_phone
 
@@ -116,6 +117,7 @@ async def main() -> None:
     dp.include_router(location_router)
     dp.include_router(contact_router)
     dp.include_router(stop_router)
+    dp.include_router(resume_router)
 
     asyncio.create_task(remind_every_12h(bot))
 
