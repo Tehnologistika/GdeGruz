@@ -25,6 +25,9 @@ REMIND_HOURS = float(os.getenv("REMIND_HOURS", "0.2"))  # default 0.2 h ≈ 
 GROUP_CHAT_ID = int(os.getenv("GROUP_CHAT_ID", "0"))
 ESCALATE_DELAY = timedelta(hours=REMIND_HOURS + 2)      # reminder + 2 h
 
+# minutes to wait if DB fetch fails (at least 2 min, or REMIND_HOURS*60)
+POLL_MINUTES = max(int(REMIND_HOURS * 60), 2)
+
 load_dotenv()
 
 logging.basicConfig(
@@ -38,6 +41,7 @@ ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 
 
 async def remind_every_12h(bot: Bot) -> None:
+    logger.info("reminder-loop: started (REMIND_HOURS=%s)", REMIND_HOURS)
     while True:
         now = datetime.now(timezone.utc)
         # fetch current list of drivers on each cycle
