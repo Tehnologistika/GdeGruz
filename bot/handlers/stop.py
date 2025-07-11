@@ -9,7 +9,7 @@ Handler for the “Закончить отслеживание” button.
 
 from aiogram import Router, F, types
 
-from bot.keyboards import help_kb  # показываем клавиатуру «Помощь»
+
 from db import get_phone, set_active
 
 import os
@@ -30,7 +30,7 @@ async def stop_tracking(message: types.Message):
     await message.answer(
         "Отслеживание остановлено ✅\n"
         "Спасибо! Если нужно возобновить — снова нажмите «Поделиться местоположением».",
-        reply_markup=help_kb(),
+        reply_markup=types.ReplyKeyboardRemove()
     )
     
     # помечаем водителя как неактивного
