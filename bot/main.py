@@ -19,7 +19,7 @@ from .handlers.contact import router as contact_router
 from .handlers.stop import router as stop_router
 from .handlers.resume import router as resume_router
 from .handlers.redeploy import redeploy
-from db import get_phone
+from db import get_phone, is_active
 
 # === intervals (in hours) ===
 REMIND_HOURS = float(os.getenv("REMIND_HOURS", "0.2"))  # default 0.2 h ≈ 12 min
@@ -60,6 +60,9 @@ async def remind_every_12h(bot: Bot) -> None:
             continue
 
         for uid in user_ids:
+            # пропускаем водителей с active = 0
+            if not await is_active(uid):
+                continue
             try:
                 point = await db.get_last_point(uid)
             except Exception:
