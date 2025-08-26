@@ -156,9 +156,15 @@ async def get_last_points() -> list[tuple[int, datetime]]:
 # ---------------------------------------------------------------------------
 
 async def set_active(user_id: int, flag: bool) -> None:
-    """Enable/disable tracking for a driver."""
+    """Enable/disable tracking for a driver.
+
+    When flag=True (водитель снова активен) – удаляем его старые точки,
+    чтобы счётчик 12‑часовых напоминаний начинался «с чистого листа».
+    """
     async with aiosqlite.connect(DB_PATH) as db:
         await _ensure_driver_schema(db)
+
+        # 1) Обновляем флаг в таблице drivers
         await db.execute(
             """
             INSERT INTO drivers(user_id, active) VALUES(?, ?)
@@ -166,8 +172,15 @@ async def set_active(user_id: int, flag: bool) -> None:
             """,
             (user_id, int(flag)),
         )
+
+        # 2) Если отслеживание вновь включено – очищаем предыдущие точки
+        if flag:
+            await db.execute("DELETE FROM points WHERE user_id = ?", (user_id,))
+
         await db.commit()
-    logger.info("Set active=%s for %s", flag, user_id)
+
+    logger.info("Set active=%s for %s (old points %s)",
+                flag, user_id, "purged" if flag else "kept")
 
 
 async def is_active(user_id: int) -> bool:
@@ -179,3 +192,15 @@ async def is_active(user_id: int) -> bool:
         ) as cur:
             row = await cur.fetchone()
     return bool(row[0]) if row else True
+
+
+async def clear_all() -> None:
+    """Remove all stored drivers and location points."""
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    async with aiosqlite.connect(DB_PATH) as db:
+        await _ensure_schema(db)
+        await _ensure_driver_schema(db)
+        await db.execute("DELETE FROM points")
+        await db.execute("DELETE FROM drivers")
+        await db.commit()
+    logger.info("Database cleared")

@@ -39,3 +39,17 @@ def location_kb() -> ReplyKeyboardMarkup:
     kb.button(text="Помощь")
     kb.adjust(1, 1, 1)
     return kb.as_markup(resize_keyboard=True)
+
+# ---------------------------------------------------------------------------
+# Клавиатура для возобновления отслеживания
+# ---------------------------------------------------------------------------
+
+def resume_kb() -> ReplyKeyboardMarkup:
+    """Отображается после «Закончить отслеживание».
+
+    Содержит одну кнопку «Возобновить отслеживание».
+    """
+    kb = ReplyKeyboardBuilder()
+    kb.button(text="Возобновить отслеживание")
+    kb.adjust(1)
+    return kb.as_markup(resize_keyboard=True)
