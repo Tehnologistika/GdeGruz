@@ -1,52 +1,183 @@
-<!DOCTYPE html>
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
 <html>
 <head>
-  <meta charset="utf-8" />
-  <title>Map</title>
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-sA+4tHooJKALNSnG3xv7tOjYoyLh6HB0eItnACznrs8="
-    crossorigin=""
-  />
-  <style>
-    #map { height: 90vh; }
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta http-equiv="Content-Style-Type" content="text/css">
+  <title></title>
+  <meta name="Generator" content="Cocoa HTML Writer">
+  <meta name="CocoaVersion" content="2575.6">
+  <style type="text/css">
+    p.p1 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px Times; -webkit-text-stroke: #000000}
+    p.p2 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px Times; -webkit-text-stroke: #000000; min-height: 14.0px}
+    span.s1 {font-kerning: none}
   </style>
 </head>
 <body>
-<div id="map"></div>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-        integrity="sha256-oQmLsCkvwKZZpt0kH+uLHOR2E31x4nHTqPtxypXQ1KA="
-        crossorigin=""></script>
-<script>
-  const userId = {{ user_id }};
-  const map = L.map('map').setView([0, 0], 13);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19,
-    attribution: '© OpenStreetMap'
-  }).addTo(map);
-  let marker = null;
-
-  async function refresh() {
-    try {
-      const resp = await fetch(`/api/last/${userId}`);
-      if (!resp.ok) return;
-      const data = await resp.json();
-      const lat = data.lat;
-      const lon = data.lon;
-      if (!marker) {
-        marker = L.marker([lat, lon]).addTo(map);
-      } else {
-        marker.setLatLng([lat, lon]);
-      }
-      map.setView([lat, lon], 13);
-    } catch (e) {
-      console.error(e);
-    }
-  }
-
-  refresh();
-  setInterval(refresh, 10000);
-</script>
+<p class="p1"><span class="s1">&lt;!DOCTYPE html&gt;</span></p>
+<p class="p1"><span class="s1">&lt;html&gt;</span></p>
+<p class="p1"><span class="s1">&lt;head&gt;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>&lt;meta charset="utf-8" /&gt;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>&lt;title&gt;Map - Driver {{ user_id }}&lt;/title&gt;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>&lt;link</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>rel="stylesheet"</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>integrity="sha256-sA+4tHooJKALNSnG3xv7tOjYoyLh6HB0eItnACznrs8="</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>crossorigin=""</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>/&gt;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>&lt;style&gt;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>body {</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>margin: 0;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>padding: 0;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>}</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>#header {</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>background: #2c3e50;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>color: white;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>padding: 15px 20px;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>box-shadow: 0 2px 4px rgba(0,0,0,0.1);</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>}</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>#header h1 {</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>margin: 0;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>font-size: 20px;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>font-weight: 500;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>}</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>#status {</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>margin: 5px 0 0 0;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>font-size: 13px;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>opacity: 0.8;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>}</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>#map {<span class="Apple-converted-space"> </span></span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>height: calc(100vh - 80px);</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>width: 100%;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>}</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>.error-message {</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>position: absolute;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>top: 100px;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>left: 50%;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>transform: translateX(-50%);</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>background: #e74c3c;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>color: white;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>padding: 15px 25px;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>border-radius: 8px;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>box-shadow: 0 4px 6px rgba(0,0,0,0.2);</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>z-index: 1000;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>display: none;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>}</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>&lt;/style&gt;</span></p>
+<p class="p1"><span class="s1">&lt;/head&gt;</span></p>
+<p class="p1"><span class="s1">&lt;body&gt;</span></p>
+<p class="p1"><span class="s1">&lt;div id="header"&gt;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>&lt;h1&gt;🚚 Водитель {{ user_id }}&lt;/h1&gt;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>&lt;div id="status"&gt;Загрузка...&lt;/div&gt;</span></p>
+<p class="p1"><span class="s1">&lt;/div&gt;</span></p>
+<p class="p2"><span class="s1"></span><br></p>
+<p class="p1"><span class="s1">&lt;div id="error" class="error-message"&gt;&lt;/div&gt;</span></p>
+<p class="p1"><span class="s1">&lt;div id="map"&gt;&lt;/div&gt;</span></p>
+<p class="p2"><span class="s1"></span><br></p>
+<p class="p1"><span class="s1">&lt;script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>integrity="sha256-oQmLsCkvwKZZpt0kH+uLHOR2E31x4nHTqPtxypXQ1KA="</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>crossorigin=""&gt;&lt;/script&gt;</span></p>
+<p class="p1"><span class="s1">&lt;script&gt;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>const userId = {{ user_id }};</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>const apiToken = "{{ api_token }}";</span></p>
+<p class="p2"><span class="s1"><span class="Apple-converted-space">  </span></span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>const map = L.map('map').setView([55.7558, 37.6173], 5); // Москва по умолчанию</span></p>
+<p class="p2"><span class="s1"><span class="Apple-converted-space">  </span></span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>maxZoom: 19,</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>attribution: '© OpenStreetMap'</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>}).addTo(map);</span></p>
+<p class="p2"><span class="s1"><span class="Apple-converted-space">  </span></span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>let marker = null;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>let lastUpdate = null;</span></p>
+<p class="p2"><span class="s1"><span class="Apple-converted-space">  </span></span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>function showError(message) {</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>const errorDiv = document.getElementById('error');</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>errorDiv.textContent = message;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>errorDiv.style.display = 'block';</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>setTimeout(() =&gt; {</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>errorDiv.style.display = 'none';</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>}, 5000);</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>}</span></p>
+<p class="p2"><span class="s1"><span class="Apple-converted-space">  </span></span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>function updateStatus(text, isError = false) {</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>const statusDiv = document.getElementById('status');</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>statusDiv.textContent = text;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>statusDiv.style.color = isError ? '#e74c3c' : 'rgba(255,255,255,0.8)';</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>}</span></p>
+<p class="p2"><span class="s1"><span class="Apple-converted-space">  </span></span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>function formatTimeDiff(date) {</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>const now = new Date();</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>const diff = Math.floor((now - date) / 1000); // секунды</span></p>
+<p class="p2"><span class="s1"><span class="Apple-converted-space">    </span></span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>if (diff &lt; 60) return `${diff} сек. назад`;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>if (diff &lt; 3600) return `${Math.floor(diff / 60)} мин. назад`;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>if (diff &lt; 86400) return `${Math.floor(diff / 3600)} ч. назад`;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>return `${Math.floor(diff / 86400)} дн. назад`;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>}</span></p>
+<p class="p2"><span class="s1"></span><br></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>async function refresh() {</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>try {</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>// Отправляем запрос с токеном авторизации</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>const resp = await fetch(`/api/last/${userId}`, {</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>headers: {</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">          </span>'Authorization': `Bearer ${apiToken}`</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>}</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>});</span></p>
+<p class="p2"><span class="s1"><span class="Apple-converted-space">      </span></span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>if (!resp.ok) {</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>if (resp.status === 401 || resp.status === 403) {</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">          </span>showError('Ошибка авторизации');</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">          </span>updateStatus('❌ Нет доступа', true);</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>} else if (resp.status === 404) {</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">          </span>updateStatus('⚠️ Нет данных о местоположении', true);</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>} else {</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">          </span>throw new Error(`HTTP ${resp.status}`);</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>}</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>return;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>}</span></p>
+<p class="p2"><span class="s1"><span class="Apple-converted-space">      </span></span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>const data = await resp.json();</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>const lat = data.lat;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>const lon = data.lon;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>const ts = new Date(data.ts);</span></p>
+<p class="p2"><span class="s1"><span class="Apple-converted-space">      </span></span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>lastUpdate = ts;</span></p>
+<p class="p2"><span class="s1"><span class="Apple-converted-space">      </span></span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>// Обновляем маркер</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>if (!marker) {</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>marker = L.marker([lat, lon]).addTo(map);</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>marker.bindPopup(`Последнее обновление: ${ts.toLocaleString('ru-RU')}`);</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>map.setView([lat, lon], 13);</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>} else {</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>marker.setLatLng([lat, lon]);</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>marker.getPopup().setContent(`Последнее обновление: ${ts.toLocaleString('ru-RU')}`);</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>}</span></p>
+<p class="p2"><span class="s1"><span class="Apple-converted-space">      </span></span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>// Обновляем статус</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>updateStatus(`✅ Обновлено ${formatTimeDiff(ts)}`);</span></p>
+<p class="p2"><span class="s1"><span class="Apple-converted-space">      </span></span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>} catch (e) {</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>console.error('Ошибка загрузки:', e);</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>updateStatus(`❌ Ошибка соединения`, true);</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>showError(`Не удалось загрузить данные: ${e.message}`);</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>}</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>}</span></p>
+<p class="p2"><span class="s1"></span><br></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>// Первая загрузка</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>refresh();</span></p>
+<p class="p2"><span class="s1"><span class="Apple-converted-space">  </span></span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>// Автообновление каждые 10 секунд</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>setInterval(refresh, 10000);</span></p>
+<p class="p2"><span class="s1"><span class="Apple-converted-space">  </span></span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>// Обновление времени в статусе каждую секунду</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>setInterval(() =&gt; {</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>if (lastUpdate) {</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>updateStatus(`✅ Обновлено ${formatTimeDiff(lastUpdate)}`);</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>}</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>}, 1000);</span></p>
+<p class="p1"><span class="s1">&lt;/script&gt;</span></p>
+<p class="p1"><span class="s1">&lt;/body&gt;</span></p>
+<p class="p1"><span class="s1">&lt;/html&gt;</span></p>
 </body>
 </html>
