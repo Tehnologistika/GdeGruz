@@ -20,7 +20,7 @@ GROUP_CHAT_ID = int(os.getenv("GROUP_CHAT_ID", "0"))
 router = Router(name=__name__)
 
 
-@router.message(F.text == "Возобновить отслеживание")
+@router.message(F.text == "▶️ Возобновить отслеживание")
 async def resume_tracking(message: types.Message):
     uid = message.from_user.id
 

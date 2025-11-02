@@ -13,13 +13,13 @@ def main_kb() -> ReplyKeyboardMarkup:
     kb = ReplyKeyboardBuilder()
 
     # Кнопка запроса телефона
-    kb.button(text="Поделиться номером", request_contact=True)
+    kb.button(text="📱 Поделиться номером", request_contact=True)
     # Кнопка запроса локации
-    kb.button(text="Поделиться местоположением", request_location=True)
+    kb.button(text="📍 Поделиться местоположением", request_location=True)
     # Кнопка запроса помощи
-    kb.button(text="Помощь")
+    kb.button(text="❓ Помощь")
     # Кнопка завершения отслеживания
-    kb.button(text="Закончить отслеживание")
+    kb.button(text="🛑 Закончить отслеживание")
 
     kb.adjust(1, 1, 1, 1)  # каждая кнопка в своей строке
     return kb.as_markup(resize_keyboard=True)
@@ -34,9 +34,9 @@ def location_kb() -> ReplyKeyboardMarkup:
     • «Помощь»
     """
     kb = ReplyKeyboardBuilder()
-    kb.button(text="Поделиться местоположением", request_location=True)
-    kb.button(text="Закончить отслеживание")
-    kb.button(text="Помощь")
+    kb.button(text="📍 Поделиться местоположением", request_location=True)
+    kb.button(text="🛑 Закончить отслеживание")
+    kb.button(text="❓ Помощь")
     kb.adjust(1, 1, 1)
     return kb.as_markup(resize_keyboard=True)
 
@@ -50,6 +50,6 @@ def resume_kb() -> ReplyKeyboardMarkup:
     Содержит одну кнопку «Возобновить отслеживание».
     """
     kb = ReplyKeyboardBuilder()
-    kb.button(text="Возобновить отслеживание")
+    kb.button(text="▶️ Возобновить отслеживание")
     kb.adjust(1)
     return kb.as_markup(resize_keyboard=True)
