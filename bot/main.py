@@ -17,12 +17,12 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.filters import CommandStart, Command
 from dotenv import load_dotenv
 
-from .handlers.start import start
-from .handlers.location import router as location_router
-from .handlers.contact import router as contact_router
-from .handlers.stop import router as stop_router
-from .handlers.resume import router as resume_router
-from .handlers.redeploy import redeploy
+from bot.handlers.start import start
+from bot.handlers.location import router as location_router
+from bot.handlers.contact import router as contact_router
+from bot.handlers.stop import router as stop_router
+from bot.handlers.resume import router as resume_router
+from bot.handlers.redeploy import redeploy
 from db import get_phone, is_active
 
 # === intervals (in hours) ===
@@ -145,28 +145,18 @@ async def remind_every_12h(bot: Bot) -> None:
         await asyncio.sleep(max(int(REMIND_HOURS * 60), 2) * 60)
 
 
-# --- ниже вставьте в main.py, заменив текущий блок main/if __name__ ---
-
-from zoneinfo import ZoneInfo  # если ещё не импортировали выше
-
-
-def as_bool(s: str | None) -> bool:
-    return (s or "").strip().lower() in {"1", "true", "yes", "on"}
-
-
 async def main() -> None:
     load_dotenv()
 
     # полезный стартовый лог
     logger.info(
-        "Boot: DAILY_REMIND=%s REMIND_AT=%s TZ=%s DB=%s",
-        os.getenv("DAILY_REMIND"),
-        os.getenv("REMIND_AT"),
+        "Boot: REMIND_HOURS=%s TZ=%s DB=%s",
+        REMIND_HOURS,
         os.getenv("TIMEZONE"),
         db.DB_PATH,
     )
 
-    # таймзона (если используется в daily_reminder_loop)
+    # таймзона
     tz_name = os.getenv("TIMEZONE", "Europe/Moscow")
     _ = ZoneInfo(tz_name)  # просто чтобы упасть раньше, если TZ неверная
 
@@ -182,11 +172,8 @@ async def main() -> None:
         dp.include_router(stop_router)
         dp.include_router(resume_router)
 
-        # включаем НУЖНЫЙ фоновый цикл
-        if as_bool(os.getenv("DAILY_REMIND")):
-            reminder_task = asyncio.create_task(daily_reminder_loop(bot))
-        else:
-            reminder_task = asyncio.create_task(remind_every_12h(bot))
+        # запускаем фоновый цикл напоминаний
+        reminder_task = asyncio.create_task(remind_every_12h(bot))
 
         try:
             logger.info("🚀 Starting polling")
