@@ -1,4 +1,5 @@
 import logging
+import os
 from datetime import datetime
 from pathlib import Path
 
@@ -6,7 +7,9 @@ import aiosqlite
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = Path("/home/git/fleet-live-bot/userdata/points.db")
+# Путь к базе данных - конфигурируется через переменную окружения
+# По умолчанию: /app/data/points.db для Docker, ./data/points.db для локальной разработки
+DB_PATH = Path(os.getenv("DB_PATH", "/app/data/points.db"))
 
 
 async def init() -> None:
