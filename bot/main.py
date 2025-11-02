@@ -1,8 +1,13 @@
+import os, sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 import asyncio
 import logging
 import os
 from datetime import datetime, timezone, timedelta
 from dateutil.parser import isoparse
+from zoneinfo import ZoneInfo
+
 
 import aiosqlite
 import db
@@ -24,7 +29,7 @@ from db import get_phone, is_active
 REMIND_HOURS = float(os.getenv("REMIND_HOURS", "0.2"))  # default 0.2 h ≈ 12 min
 
 GROUP_CHAT_ID = int(os.getenv("GROUP_CHAT_ID", "0"))
-ESCALATE_DELAY = timedelta(hours=REMIND_HOURS + 2)      # reminder + 2 h
+ESCALATE_DELAY = timedelta(hours=REMIND_HOURS + 2)  # reminder + 2 h
 
 # minutes to wait if DB fetch fails (at least 2 min, or REMIND_HOURS*60)
 POLL_MINUTES = max(int(REMIND_HOURS * 60), 2)
@@ -50,11 +55,11 @@ async def remind_every_12h(bot: Bot) -> None:
     logger.info("reminder-loop: started (REMIND_HOURS=%s)", REMIND_HOURS)
     while True:
         now = datetime.now(timezone.utc)
-        
+
         try:
             async with aiosqlite.connect(db.DB_PATH) as conn:
                 await db._ensure_schema(conn)
-                
+
                 # FIX 2: Берем только АКТИВНЫХ водителей
                 # (у которых есть запись в drivers с active=1)
                 query = """
@@ -66,7 +71,9 @@ async def remind_every_12h(bot: Bot) -> None:
                 async with conn.execute(query) as cur:
                     rows = await cur.fetchall()
                     user_ids = [row[0] for row in rows]
-                    logger.debug("reminder-loop: active users=%s (now=%s)", user_ids, now)
+                    logger.debug(
+                        "reminder-loop: active users=%s (now=%s)", user_ids, now
+                    )
         except Exception as err:
             logger.exception("Failed to fetch user list: %s", err)
             await asyncio.sleep(POLL_MINUTES * 60)
@@ -77,7 +84,7 @@ async def remind_every_12h(bot: Bot) -> None:
                 point = await db.get_last_point(uid)
             except Exception:
                 continue
-            
+
             if not point:
                 continue
 
@@ -99,7 +106,7 @@ async def remind_every_12h(bot: Bot) -> None:
                 try:
                     await bot.send_message(
                         uid,
-                        "Напоминание! Пожалуйста, нажмите «Поделиться местоположением»."
+                        "Напоминание! Пожалуйста, нажмите «Поделиться местоположением».",
                     )
                 except Exception as exc:
                     logger.exception("Failed to send reminder to %s: %s", uid, exc)
@@ -109,29 +116,28 @@ async def remind_every_12h(bot: Bot) -> None:
             if time_since_last > ESCALATE_DELAY and GROUP_CHAT_ID:
                 # Проверяем, не отправляли ли уже эскалацию
                 last_escalation = escalation_sent.get(uid)
-                
+
                 # Отправляем эскалацию, если:
                 # - ещё не отправляли OR
                 # - с последней эскалации прошло >12 часов (чтобы напомнить снова)
-                should_escalate = (
-                    last_escalation is None or 
-                    (now - last_escalation) > timedelta(hours=12)
-                )
-                
+                should_escalate = last_escalation is None or (
+                    now - last_escalation
+                ) > timedelta(hours=12)
+
                 if should_escalate:
                     logger.info("Escalating: no coords from %s since %s", uid, last_ts)
                     phone = await get_phone(uid)
                     caption = (
                         f"⚠️ Нет координат от водителя 📞 {phone} с {last_ts:%d.%m %H:%M} UTC"
-                        if phone else
-                        f"⚠️ Нет координат от водителя {uid} с {last_ts:%d.%m %H:%M} UTC"
+                        if phone
+                        else f"⚠️ Нет координат от водителя {uid} с {last_ts:%d.%m %H:%M} UTC"
                     )
                     try:
                         await bot.send_message(GROUP_CHAT_ID, caption)
                         escalation_sent[uid] = now  # Запоминаем время эскалации
                     except Exception as e:
                         logger.warning("Не удалось отправить эскалацию: %s", e)
-            
+
             # FIX 5: Очищаем трекинг эскалации, если водитель снова активен
             if time_since_last <= timedelta(hours=REMIND_HOURS):
                 escalation_sent.pop(uid, None)
@@ -139,45 +145,66 @@ async def remind_every_12h(bot: Bot) -> None:
         await asyncio.sleep(max(int(REMIND_HOURS * 60), 2) * 60)
 
 
+# --- ниже вставьте в main.py, заменив текущий блок main/if __name__ ---
+
+from zoneinfo import ZoneInfo  # если ещё не импортировали выше
+
+
+def as_bool(s: str | None) -> bool:
+    return (s or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 async def main() -> None:
-    # FIX 6: Проверка обязательных переменных
-    if not BOT_TOKEN:
-        raise RuntimeError("❌ BOT_TOKEN не установлен в .env")
-    
-    if not GROUP_CHAT_ID:
-        logger.warning("⚠️  GROUP_CHAT_ID не установлен - уведомления в группу отключены")
-    
-    if not ADMIN_ID:
-        logger.warning("⚠️  ADMIN_ID не установлен - команда /redeploy недоступна")
+    load_dotenv()
 
-    await db.init()
+    # полезный стартовый лог
+    logger.info(
+        "Boot: DAILY_REMIND=%s REMIND_AT=%s TZ=%s DB=%s",
+        os.getenv("DAILY_REMIND"),
+        os.getenv("REMIND_AT"),
+        os.getenv("TIMEZONE"),
+        db.DB_PATH,
+    )
 
-    bot = Bot(BOT_TOKEN)
-    dp = Dispatcher(storage=MemoryStorage())
+    # таймзона (если используется в daily_reminder_loop)
+    tz_name = os.getenv("TIMEZONE", "Europe/Moscow")
+    _ = ZoneInfo(tz_name)  # просто чтобы упасть раньше, если TZ неверная
 
-    dp.message.register(start, CommandStart())
-    dp.message.register(redeploy, Command("redeploy"))
-    dp.include_router(location_router)
-    dp.include_router(contact_router)
-    dp.include_router(stop_router)
-    dp.include_router(resume_router)
+    # ВАЖНО: контекст-менеджер сам закроет сессию бота
+    async with Bot(BOT_TOKEN) as bot:
+        dp = Dispatcher(storage=MemoryStorage())
 
-    # Запускаем фоновую задачу
-    reminder_task = asyncio.create_task(remind_every_12h(bot))
+        # регистрируем обработчики
+        dp.message.register(start, CommandStart())
+        dp.message.register(redeploy, Command("redeploy"))
+        dp.include_router(location_router)
+        dp.include_router(contact_router)
+        dp.include_router(stop_router)
+        dp.include_router(resume_router)
 
-    try:
-        logger.info("🚀 Starting polling")
-        await dp.start_polling(bot)
-    finally:
-        # FIX 7: Graceful shutdown
-        reminder_task.cancel()
+        # включаем НУЖНЫЙ фоновый цикл
+        if as_bool(os.getenv("DAILY_REMIND")):
+            reminder_task = asyncio.create_task(daily_reminder_loop(bot))
+        else:
+            reminder_task = asyncio.create_task(remind_every_12h(bot))
+
         try:
-            await reminder_task
-        except asyncio.CancelledError:
-            pass
-        await bot.session.close()
-        logger.info("🛑 Bot stopped")
+            logger.info("🚀 Starting polling")
+            await dp.start_polling(bot)
+        finally:
+            # корректная остановка фоновой задачи
+            reminder_task.cancel()
+            try:
+                await reminder_task
+            except asyncio.CancelledError:
+                pass
+
+    logger.info("🛑 Bot stopped")
 
 
 if __name__ == "__main__":
+    # гарантируем, что корень проекта попадает в PYTHONPATH
+    import sys
+
+    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
     asyncio.run(main())
