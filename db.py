@@ -1,12 +1,13 @@
 import logging
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 import aiosqlite
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = Path("/home/git/fleet-live-bot/userdata/points.db")
+DB_PATH = Path("/app/data/points.db")
 
 
 async def init() -> None:
@@ -128,6 +129,26 @@ async def get_phone(user_id: int) -> str | None:
         ) as cursor:
             row = await cursor.fetchone()
         return row[0] if row else None
+
+
+async def get_user_id_by_phone(phone: str) -> Optional[int]:
+    """
+    Получить Telegram user_id водителя по номеру телефона.
+
+    Args:
+        phone: Номер телефона (+79991234567)
+
+    Returns:
+        int | None: Telegram user_id или None если не найден
+    """
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    async with aiosqlite.connect(DB_PATH) as db:
+        await _ensure_driver_schema(db)
+        async with db.execute("""
+            SELECT user_id FROM drivers WHERE phone = ?
+        """, (phone,)) as cursor:
+            row = await cursor.fetchone()
+            return row[0] if row else None
 
 
 

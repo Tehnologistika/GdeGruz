@@ -11,6 +11,8 @@ from zoneinfo import ZoneInfo
 
 import aiosqlite
 import db
+import db_trips
+import db_documents
 
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -23,6 +25,8 @@ from bot.handlers.contact import router as contact_router
 from bot.handlers.stop import router as stop_router
 from bot.handlers.resume import router as resume_router
 from bot.handlers.redeploy import redeploy
+from bot.handlers.curator import router as curator_router
+from bot.handlers.driver_trips import router as driver_trips_router
 from db import get_phone, is_active
 
 # === intervals (in hours) ===
@@ -160,31 +164,40 @@ async def main() -> None:
     tz_name = os.getenv("TIMEZONE", "Europe/Moscow")
     _ = ZoneInfo(tz_name)  # просто чтобы упасть раньше, если TZ неверная
 
-    # ВАЖНО: контекст-менеджер сам закроет сессию бота
-    async with Bot(BOT_TOKEN) as bot:
-        dp = Dispatcher(storage=MemoryStorage())
+    # Инициализируем базы данных
+    await db.init()
+    await db_trips.init()
+    # db_documents.init() - не используется в упрощенной системе
 
-        # регистрируем обработчики
-        dp.message.register(start, CommandStart())
-        dp.message.register(redeploy, Command("redeploy"))
-        dp.include_router(location_router)
-        dp.include_router(contact_router)
-        dp.include_router(stop_router)
-        dp.include_router(resume_router)
+    # Создаем бота (aiogram 3.0.0 не поддерживает async with)
+    bot = Bot(BOT_TOKEN)
+    dp = Dispatcher(storage=MemoryStorage())
 
-        # запускаем фоновый цикл напоминаний
-        reminder_task = asyncio.create_task(remind_every_12h(bot))
+    # регистрируем обработчики
+    dp.message.register(start, CommandStart())
+    dp.message.register(redeploy, Command("redeploy"))
+    dp.include_router(location_router)
+    dp.include_router(contact_router)
+    dp.include_router(stop_router)
+    dp.include_router(resume_router)
+    dp.include_router(curator_router)
+    dp.include_router(driver_trips_router)
 
+    # запускаем фоновый цикл напоминаний
+    reminder_task = asyncio.create_task(remind_every_12h(bot))
+
+    try:
+        logger.info("🚀 Starting polling")
+        await dp.start_polling(bot)
+    finally:
+        # корректная остановка фоновой задачи
+        reminder_task.cancel()
         try:
-            logger.info("🚀 Starting polling")
-            await dp.start_polling(bot)
-        finally:
-            # корректная остановка фоновой задачи
-            reminder_task.cancel()
-            try:
-                await reminder_task
-            except asyncio.CancelledError:
-                pass
+            await reminder_task
+        except asyncio.CancelledError:
+            pass
+        # Закрываем сессию бота
+        await bot.session.close()
 
     logger.info("🛑 Bot stopped")
 
