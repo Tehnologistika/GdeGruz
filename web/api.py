@@ -5,8 +5,12 @@ from fastapi.templating import Jinja2Templates
 from typing import Optional
 
 from db import get_last_point, init, get_last_points, get_phone
+from web.api_trips import router as trips_router
 
 app = FastAPI()
+
+# Подключаем роутер для рейсов
+app.include_router(trips_router)
 
 # FIX: Добавляем секретный токен для доступа к API
 # Установите API_SECRET_TOKEN в .env файле

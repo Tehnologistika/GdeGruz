@@ -11,6 +11,8 @@ from zoneinfo import ZoneInfo
 
 import aiosqlite
 import db
+import db_trips
+import db_documents
 
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -23,6 +25,8 @@ from bot.handlers.contact import router as contact_router
 from bot.handlers.stop import router as stop_router
 from bot.handlers.resume import router as resume_router
 from bot.handlers.redeploy import redeploy
+from bot.handlers.documents import router as documents_router
+from bot.handlers.trips import router as trips_router
 from db import get_phone, is_active
 
 # === intervals (in hours) ===
@@ -160,6 +164,10 @@ async def main() -> None:
     tz_name = os.getenv("TIMEZONE", "Europe/Moscow")
     _ = ZoneInfo(tz_name)  # просто чтобы упасть раньше, если TZ неверная
 
+    # Инициализируем базы данных
+    await db_trips.init_trips_db()
+    await db_documents.init_documents_db()
+
     # ВАЖНО: контекст-менеджер сам закроет сессию бота
     async with Bot(BOT_TOKEN) as bot:
         dp = Dispatcher(storage=MemoryStorage())
@@ -171,6 +179,8 @@ async def main() -> None:
         dp.include_router(contact_router)
         dp.include_router(stop_router)
         dp.include_router(resume_router)
+        dp.include_router(documents_router)
+        dp.include_router(trips_router)
 
         # запускаем фоновый цикл напоминаний
         reminder_task = asyncio.create_task(remind_every_12h(bot))

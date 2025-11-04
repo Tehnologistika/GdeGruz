@@ -30,14 +30,18 @@ def location_kb() -> ReplyKeyboardMarkup:
 
     Кнопки:
     • «Поделиться местоположением»
+    • «Отправить документы»
+    • «Мои рейсы»
     • «Закончить отслеживание»
     • «Помощь»
     """
     kb = ReplyKeyboardBuilder()
     kb.button(text="Поделиться местоположением", request_location=True)
+    kb.button(text="📤 Отправить документы")
+    kb.button(text="📋 Мои рейсы")
     kb.button(text="Закончить отслеживание")
     kb.button(text="Помощь")
-    kb.adjust(1, 1, 1)
+    kb.adjust(1, 2, 1, 1)  # 1 в первой строке, 2 во второй, потом по 1
     return kb.as_markup(resize_keyboard=True)
 
 # ---------------------------------------------------------------------------
