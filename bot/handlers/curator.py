@@ -52,6 +52,144 @@ def cancel_kb():
     return kb.as_markup()
 
 
+@router.message(Command("admin"))
+async def admin_panel(message: Message):
+    """
+    Админ-панель для кураторов.
+
+    Использование: /admin
+    """
+    if not is_curator(message.from_user.id):
+        await message.answer("❌ Эта команда доступна только кураторам")
+        return
+
+    # Получаем статистику
+    try:
+        all_trips = await db_trips.get_all_trips(limit=1000)
+
+        # Считаем по статусам
+        stats = {
+            'assigned': 0,
+            'active': 0,
+            'loading': 0,
+            'in_transit': 0,
+            'unloading': 0,
+            'completed': 0,
+            'total': len(all_trips)
+        }
+
+        for trip in all_trips:
+            status = trip.get('status', 'unknown')
+            if status in stats:
+                stats[status] += 1
+
+        # Формируем админ-панель
+        kb = InlineKeyboardBuilder()
+        kb.button(text="➕ Создать рейс", callback_data="new_trip")
+        kb.button(text="📋 Активные рейсы", callback_data="list_active_trips")
+        kb.button(text="📊 Все рейсы", callback_data="list_trips")
+        kb.button(text="✅ Завершенные", callback_data="list_completed_trips")
+        kb.button(text="📈 Статистика", callback_data="show_stats")
+        kb.adjust(1, 2, 2, 1)
+
+        await message.answer(
+            "🎛 **Панель управления рейсами**\n\n"
+            f"📊 Статистика:\n"
+            f"• ⏳ Назначено: {stats['assigned']}\n"
+            f"• 🟢 Активно: {stats['active']}\n"
+            f"• 📦 Погрузка: {stats['loading']}\n"
+            f"• 🚚 В пути: {stats['in_transit']}\n"
+            f"• 📥 Выгрузка: {stats['unloading']}\n"
+            f"• ✅ Завершено: {stats['completed']}\n"
+            f"• 📌 Всего: {stats['total']}\n\n"
+            f"Выберите действие:",
+            reply_markup=kb.as_markup(),
+            parse_mode="Markdown"
+        )
+    except Exception as e:
+        logger.error(f"Failed to show admin panel: {e}", exc_info=True)
+        await message.answer(
+            "❌ Ошибка загрузки панели управления.\n"
+            "Попробуйте позже."
+        )
+
+
+@router.message(Command("trips"))
+async def list_trips_command(message: Message):
+    """
+    Список всех рейсов (только для кураторов).
+
+    Использование: /trips
+    """
+    if not is_curator(message.from_user.id):
+        await message.answer("❌ Эта команда доступна только кураторам")
+        return
+
+    try:
+        # Получаем активные рейсы (не завершенные)
+        all_trips = await db_trips.get_all_trips(limit=50)
+        active_trips = [t for t in all_trips if t['status'] not in ['completed', 'cancelled']]
+
+        if not active_trips:
+            kb = InlineKeyboardBuilder()
+            kb.button(text="➕ Создать рейс", callback_data="new_trip")
+
+            await message.answer(
+                "📋 **Активные рейсы**\n\n"
+                "Нет активных рейсов.\n\n"
+                "Используйте /create_trip для создания нового рейса.",
+                reply_markup=kb.as_markup(),
+                parse_mode="Markdown"
+            )
+            return
+
+        # Формируем список
+        text = "📋 **Активные рейсы:**\n\n"
+
+        status_emoji = {
+            'assigned': '⏳',
+            'active': '🟢',
+            'loading': '📦',
+            'in_transit': '🚚',
+            'unloading': '📥',
+            'completed': '✅'
+        }
+
+        for trip in active_trips[:10]:
+            emoji = status_emoji.get(trip['status'], '❓')
+            text += (
+                f"{emoji} **{trip['trip_number']}** - {trip['phone']}\n"
+                f"   {trip['loading_address'][:30]}...\n"
+                f"   ↓\n"
+                f"   {trip['unloading_address'][:30]}...\n\n"
+            )
+
+        if len(active_trips) > 10:
+            text += f"\n... и еще {len(active_trips) - 10} рейсов"
+
+        # Кнопки для навигации
+        kb = InlineKeyboardBuilder()
+        for trip in active_trips[:6]:
+            kb.button(
+                text=f"📋 {trip['trip_number']}",
+                callback_data=f"view_trip:{trip['trip_id']}"
+            )
+
+        kb.button(text="➕ Создать рейс", callback_data="new_trip")
+        kb.button(text="🔄 Обновить", callback_data="list_active_trips")
+        kb.adjust(2, 2, 2, 1, 1)
+
+        await message.answer(
+            text,
+            reply_markup=kb.as_markup(),
+            parse_mode="Markdown"
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to list trips: {e}", exc_info=True)
+        await message.answer("❌ Ошибка загрузки списка рейсов")
+
+
 @router.message(Command("create_trip"))
 async def start_create_trip(message: Message, state: FSMContext):
     """
@@ -573,54 +711,64 @@ async def confirm_complete_callback(callback: CallbackQuery):
 
 @router.callback_query(F.data == "list_trips")
 async def list_trips_callback(callback: CallbackQuery):
-    """Показать список рейсов."""
+    """Показать список всех рейсов."""
     if not is_curator(callback.from_user.id):
         await callback.answer("❌ Недостаточно прав", show_alert=True)
         return
 
     try:
-        # Получаем активные рейсы
-        active_trips = await db_trips.get_all_trips(limit=10)
+        # Получаем все рейсы
+        all_trips = await db_trips.get_all_trips(limit=50)
 
-        if not active_trips:
+        if not all_trips:
+            kb = InlineKeyboardBuilder()
+            kb.button(text="➕ Создать рейс", callback_data="new_trip")
+            kb.button(text="◀️ Назад", callback_data="back_to_admin")
+
             await callback.message.edit_text(
-                "📋 **Список рейсов**\n\n"
-                "Нет активных рейсов.\n\n"
+                "📋 **Все рейсы**\n\n"
+                "Нет рейсов.\n\n"
                 "Используйте /create_trip для создания нового рейса.",
+                reply_markup=kb.as_markup(),
                 parse_mode="Markdown"
             )
             await callback.answer()
             return
 
         # Формируем список
-        text = "📋 **Активные рейсы:**\n\n"
+        text = "📊 **Все рейсы** (последние 10):\n\n"
 
-        for trip in active_trips[:5]:
-            status_emoji = {
-                'assigned': '⏳',
-                'active': '🟢',
-                'loading': '📦',
-                'in_transit': '🚚',
-                'unloading': '📥',
-                'completed': '✅'
-            }
+        status_emoji = {
+            'assigned': '⏳',
+            'active': '🟢',
+            'loading': '📦',
+            'in_transit': '🚚',
+            'unloading': '📥',
+            'completed': '✅'
+        }
+
+        for trip in all_trips[:10]:
             emoji = status_emoji.get(trip['status'], '❓')
-
             text += (
                 f"{emoji} **{trip['trip_number']}** - {trip['phone']}\n"
-                f"   {trip['loading_address'][:30]}... → {trip['unloading_address'][:30]}...\n\n"
+                f"   {trip['loading_address'][:30]}...\n"
+                f"   ↓\n"
+                f"   {trip['unloading_address'][:30]}...\n\n"
             )
+
+        if len(all_trips) > 10:
+            text += f"\n... и еще {len(all_trips) - 10} рейсов"
 
         # Кнопки для навигации
         kb = InlineKeyboardBuilder()
-        for trip in active_trips[:5]:
+        for trip in all_trips[:6]:
             kb.button(
                 text=f"📋 {trip['trip_number']}",
                 callback_data=f"view_trip:{trip['trip_id']}"
             )
 
-        kb.button(text="➕ Создать рейс", callback_data="new_trip")
-        kb.adjust(2, 2, 1, 1)
+        kb.button(text="◀️ Назад", callback_data="back_to_admin")
+        kb.adjust(2, 2, 2, 1)
 
         await callback.message.edit_text(
             text,
@@ -633,6 +781,152 @@ async def list_trips_callback(callback: CallbackQuery):
     except Exception as e:
         logger.error(f"Failed to list trips: {e}", exc_info=True)
         await callback.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
+
+
+@router.callback_query(F.data == "list_active_trips")
+async def list_active_trips_callback(callback: CallbackQuery):
+    """Показать список активных рейсов."""
+    if not is_curator(callback.from_user.id):
+        await callback.answer("❌ Недостаточно прав", show_alert=True)
+        return
+
+    try:
+        # Получаем активные рейсы (не завершенные)
+        all_trips = await db_trips.get_all_trips(limit=100)
+        active_trips = [t for t in all_trips if t['status'] not in ['completed', 'cancelled']]
+
+        if not active_trips:
+            kb = InlineKeyboardBuilder()
+            kb.button(text="➕ Создать рейс", callback_data="new_trip")
+            kb.button(text="◀️ Назад", callback_data="back_to_admin")
+
+            await callback.message.edit_text(
+                "📋 **Активные рейсы**\n\n"
+                "Нет активных рейсов.\n\n"
+                "Используйте /create_trip для создания нового рейса.",
+                reply_markup=kb.as_markup(),
+                parse_mode="Markdown"
+            )
+            await callback.answer()
+            return
+
+        # Формируем список
+        text = "📋 **Активные рейсы:**\n\n"
+
+        status_emoji = {
+            'assigned': '⏳',
+            'active': '🟢',
+            'loading': '📦',
+            'in_transit': '🚚',
+            'unloading': '📥',
+        }
+
+        for trip in active_trips[:10]:
+            emoji = status_emoji.get(trip['status'], '❓')
+            text += (
+                f"{emoji} **{trip['trip_number']}** - {trip['phone']}\n"
+                f"   {trip['loading_address'][:30]}...\n"
+                f"   ↓\n"
+                f"   {trip['unloading_address'][:30]}...\n\n"
+            )
+
+        if len(active_trips) > 10:
+            text += f"\n... и еще {len(active_trips) - 10} рейсов"
+
+        # Кнопки для навигации
+        kb = InlineKeyboardBuilder()
+        for trip in active_trips[:6]:
+            kb.button(
+                text=f"📋 {trip['trip_number']}",
+                callback_data=f"view_trip:{trip['trip_id']}"
+            )
+
+        kb.button(text="🔄 Обновить", callback_data="list_active_trips")
+        kb.button(text="◀️ Назад", callback_data="back_to_admin")
+        kb.adjust(2, 2, 2, 1, 1)
+
+        await callback.message.edit_text(
+            text,
+            reply_markup=kb.as_markup(),
+            parse_mode="Markdown"
+        )
+
+        await callback.answer()
+
+    except Exception as e:
+        logger.error(f"Failed to list active trips: {e}", exc_info=True)
+        await callback.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
+
+
+@router.callback_query(F.data == "list_completed_trips")
+async def list_completed_trips_callback(callback: CallbackQuery):
+    """Показать список завершенных рейсов."""
+    if not is_curator(callback.from_user.id):
+        await callback.answer("❌ Недостаточно прав", show_alert=True)
+        return
+
+    try:
+        # Получаем завершенные рейсы
+        all_trips = await db_trips.get_all_trips(limit=100)
+        completed_trips = [t for t in all_trips if t['status'] == 'completed']
+
+        if not completed_trips:
+            kb = InlineKeyboardBuilder()
+            kb.button(text="◀️ Назад", callback_data="back_to_admin")
+
+            await callback.message.edit_text(
+                "✅ **Завершенные рейсы**\n\n"
+                "Нет завершенных рейсов.",
+                reply_markup=kb.as_markup(),
+                parse_mode="Markdown"
+            )
+            await callback.answer()
+            return
+
+        # Формируем список
+        text = "✅ **Завершенные рейсы** (последние 10):\n\n"
+
+        for trip in completed_trips[:10]:
+            completed_date = trip.get('completed_at', '')[:10] if trip.get('completed_at') else 'н/д'
+            text += (
+                f"✅ **{trip['trip_number']}** - {trip['phone']}\n"
+                f"   {trip['loading_address'][:30]}... → {trip['unloading_address'][:30]}...\n"
+                f"   Завершен: {completed_date}\n\n"
+            )
+
+        if len(completed_trips) > 10:
+            text += f"\n... и еще {len(completed_trips) - 10} рейсов"
+
+        # Кнопки для навигации
+        kb = InlineKeyboardBuilder()
+        for trip in completed_trips[:6]:
+            kb.button(
+                text=f"✅ {trip['trip_number']}",
+                callback_data=f"view_trip:{trip['trip_id']}"
+            )
+
+        kb.button(text="◀️ Назад", callback_data="back_to_admin")
+        kb.adjust(2, 2, 2, 1)
+
+        await callback.message.edit_text(
+            text,
+            reply_markup=kb.as_markup(),
+            parse_mode="Markdown"
+        )
+
+        await callback.answer()
+
+    except Exception as e:
+        logger.error(f"Failed to list completed trips: {e}", exc_info=True)
+        await callback.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
+
+
+@router.callback_query(F.data == "back_to_admin")
+async def back_to_admin_callback(callback: CallbackQuery):
+    """Вернуться к админ-панели."""
+    # Просто вызываем admin_panel через Message wrapper
+    await admin_panel(callback.message)
+    await callback.answer()
 
 
 @router.callback_query(F.data == "new_trip")
