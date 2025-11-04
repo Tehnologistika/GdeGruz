@@ -1,204 +1,246 @@
 """
-Модуль для работы с базой данных рейсов.
+Модуль для работы с рейсами в БД.
 
-Этот модуль обеспечивает управление рейсами и событиями рейсов.
+Упрощенная система управления рейсами:
+- Работа по телефону водителя
+- Минимальные данные (телефон, адреса, даты, ставка)
+- Статусы: assigned, active, loading, in_transit, unloading, completed
 """
 
-import aiosqlite
-from pathlib import Path
-from datetime import datetime
-from typing import Optional, List, Dict, Any
 import logging
-import json
+from datetime import datetime
+from pathlib import Path
+from typing import Optional, List, Dict, Any
+
+import aiosqlite
 
 logger = logging.getLogger(__name__)
-DB_PATH = Path("/home/user/GdeGruz/userdata/trips.db")
+
+DB_PATH = Path("/home/git/fleet-live-bot/userdata/trips.db")
 
 
-async def init_trips_db() -> None:
-    """Инициализация БД рейсов. Создает таблицы и индексы."""
+async def init() -> None:
+    """Инициализация БД рейсов."""
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     async with aiosqlite.connect(DB_PATH) as db:
-        # Создать таблицу trips
-        await db.execute("""
-            CREATE TABLE IF NOT EXISTS trips (
-                trip_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                trip_number TEXT UNIQUE NOT NULL,
-                user_id INTEGER NOT NULL,
-                customer TEXT,
-                carrier TEXT,
-                loading_address TEXT,
-                loading_date TEXT,
-                loading_lat REAL,
-                loading_lon REAL,
-                unloading_address TEXT,
-                unloading_date TEXT,
-                unloading_lat REAL,
-                unloading_lon REAL,
-                cargo_type TEXT,
-                rate REAL,
-                status TEXT DEFAULT 'created',
-                created_at TEXT NOT NULL,
-                loading_confirmed_at TEXT,
-                unloading_confirmed_at TEXT,
-                completed_at TEXT,
-                documents_sent TEXT,
-                documents_received_at TEXT,
-                curator_id INTEGER,
-                FOREIGN KEY (user_id) REFERENCES drivers(user_id)
-            )
-        """)
-
-        # Создать таблицу trip_events
-        await db.execute("""
-            CREATE TABLE IF NOT EXISTS trip_events (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                trip_id INTEGER NOT NULL,
-                event_type TEXT NOT NULL,
-                description TEXT,
-                created_at TEXT NOT NULL,
-                created_by INTEGER,
-                metadata TEXT,
-                FOREIGN KEY (trip_id) REFERENCES trips(trip_id)
-            )
-        """)
-
-        # Создать индексы для trips
-        await db.execute("""
-            CREATE INDEX IF NOT EXISTS idx_trips_user ON trips(user_id)
-        """)
-        await db.execute("""
-            CREATE INDEX IF NOT EXISTS idx_trips_status ON trips(status)
-        """)
-        await db.execute("""
-            CREATE INDEX IF NOT EXISTS idx_trips_number ON trips(trip_number)
-        """)
-
-        # Создать индексы для trip_events
-        await db.execute("""
-            CREATE INDEX IF NOT EXISTS idx_trip_events_trip
-            ON trip_events(trip_id, created_at DESC)
-        """)
-        await db.execute("""
-            CREATE INDEX IF NOT EXISTS idx_trip_events_type ON trip_events(event_type)
-        """)
-
-        await db.commit()
-
-    logger.info("Trips database initialized")
+        await _ensure_schema(db)
 
 
-async def create_trip(
-    trip_number: str,
-    user_id: int,
-    customer: str,
-    carrier: str,
+async def _ensure_schema(db: aiosqlite.Connection) -> None:
+    """Создать/обновить схему БД рейсов."""
+
+    # Создать таблицу trips с полем phone
+    await db.execute("""
+        CREATE TABLE IF NOT EXISTS trips (
+            trip_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            trip_number TEXT UNIQUE NOT NULL,
+            user_id INTEGER,
+            phone TEXT NOT NULL,
+            loading_address TEXT NOT NULL,
+            loading_date TEXT NOT NULL,
+            unloading_address TEXT NOT NULL,
+            unloading_date TEXT NOT NULL,
+            rate REAL NOT NULL,
+            status TEXT DEFAULT 'assigned',
+            created_at TEXT NOT NULL,
+            loading_confirmed_at TEXT,
+            unloading_confirmed_at TEXT,
+            completed_at TEXT,
+            curator_id INTEGER
+        )
+    """)
+
+    # Создать индекс по телефону
+    await db.execute("""
+        CREATE INDEX IF NOT EXISTS idx_trips_phone ON trips(phone)
+    """)
+
+    # Создать индекс по user_id
+    await db.execute("""
+        CREATE INDEX IF NOT EXISTS idx_trips_user ON trips(user_id)
+    """)
+
+    # Создать индекс по статусу
+    await db.execute("""
+        CREATE INDEX IF NOT EXISTS idx_trips_status ON trips(status)
+    """)
+
+    # Создать индекс по номеру
+    await db.execute("""
+        CREATE INDEX IF NOT EXISTS idx_trips_number ON trips(trip_number)
+    """)
+
+    # Таблица trip_events остается без изменений
+    await db.execute("""
+        CREATE TABLE IF NOT EXISTS trip_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            trip_id INTEGER NOT NULL,
+            event_type TEXT NOT NULL,
+            description TEXT,
+            created_at TEXT NOT NULL,
+            created_by INTEGER,
+            metadata TEXT,
+            FOREIGN KEY (trip_id) REFERENCES trips(trip_id)
+        )
+    """)
+
+    await db.execute("""
+        CREATE INDEX IF NOT EXISTS idx_trip_events_trip
+        ON trip_events(trip_id, created_at DESC)
+    """)
+
+    await db.commit()
+
+
+async def _generate_trip_number() -> str:
+    """
+    Генерация уникального номера рейса в формате ТЛ-XXXX.
+
+    Returns:
+        str: Номер рейса (например: ТЛ-0001, ТЛ-0042)
+    """
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await _ensure_schema(conn)
+
+        # Найти максимальный номер
+        async with conn.execute("""
+            SELECT trip_number FROM trips
+            WHERE trip_number LIKE 'ТЛ-%'
+            ORDER BY trip_number DESC LIMIT 1
+        """) as cursor:
+            row = await cursor.fetchone()
+
+        if row:
+            # Извлечь число из "ТЛ-0042"
+            last_num = int(row[0].split('-')[1])
+            new_num = last_num + 1
+        else:
+            new_num = 1
+
+        return f"ТЛ-{new_num:04d}"  # ТЛ-0001, ТЛ-0002, ...
+
+
+async def create_trip_by_curator(
+    phone: str,
     loading_address: str,
     loading_date: str,
     unloading_address: str,
     unloading_date: str,
-    cargo_type: str,
     rate: float,
-    curator_id: Optional[int] = None
-) -> int:
+    curator_id: int
+) -> tuple[int, str]:
     """
-    Создать новый рейс.
+    Создать рейс куратором.
 
     Args:
-        trip_number: Уникальный номер рейса
-        user_id: Telegram ID водителя
-        customer: Заказчик
-        carrier: Перевозчик
+        phone: Телефон водителя (+79991234567)
         loading_address: Адрес погрузки
-        loading_date: Дата погрузки (ISO формат)
+        loading_date: Дата погрузки (ДД.ММ.ГГГГ)
         unloading_address: Адрес выгрузки
-        unloading_date: Дата выгрузки (ISO формат)
-        cargo_type: Тип груза
+        unloading_date: Дата выгрузки (ДД.ММ.ГГГГ)
         rate: Ставка в рублях
-        curator_id: ID куратора (опционально)
+        curator_id: Telegram ID куратора
 
     Returns:
-        int: ID созданного рейса
-
-    Raises:
-        sqlite3.IntegrityError: Если рейс с таким номером уже существует
+        tuple[int, str]: (trip_id, trip_number)
     """
-    async with aiosqlite.connect(DB_PATH) as db:
-        await _ensure_schema(db)
+    # Генерируем уникальный номер рейса
+    trip_number = await _generate_trip_number()
 
-        cursor = await db.execute("""
+    # Получаем user_id по телефону (если водитель уже в системе)
+    import db
+    user_id = await db.get_user_id_by_phone(phone)
+
+    # Если водитель не найден, ставим 0 (обновится при регистрации)
+    if not user_id:
+        user_id = 0
+
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await _ensure_schema(conn)
+
+        cursor = await conn.execute("""
             INSERT INTO trips (
-                trip_number, user_id, customer, carrier,
-                loading_address, loading_date, unloading_address, unloading_date,
-                cargo_type, rate, curator_id, created_at, status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'created')
+                trip_number, user_id, phone,
+                loading_address, loading_date,
+                unloading_address, unloading_date,
+                rate, curator_id, created_at, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'assigned')
         """, (
-            trip_number, user_id, customer, carrier,
-            loading_address, loading_date, unloading_address, unloading_date,
-            cargo_type, rate, curator_id, datetime.now().isoformat()
+            trip_number, user_id, phone,
+            loading_address, loading_date,
+            unloading_address, unloading_date,
+            rate, curator_id, datetime.now().isoformat()
         ))
 
         trip_id = cursor.lastrowid
-        await db.commit()
+        await conn.commit()
 
         # Логируем событие создания
         await log_trip_event(
             trip_id=trip_id,
             event_type="created",
-            description=f"Рейс {trip_number} создан",
+            description=f"Рейс создан куратором",
             created_by=curator_id
         )
 
-    logger.info(f"Created trip #{trip_number} (ID: {trip_id}) for user {user_id}")
-    return trip_id
+    logger.info(f"Created trip #{trip_number} for phone {phone}")
+    return trip_id, trip_number
+
+
+async def get_trips_by_phone(phone: str, status: Optional[str] = None) -> List[Dict[str, Any]]:
+    """
+    Получить рейсы по телефону водителя.
+
+    Args:
+        phone: Телефон водителя
+        status: Фильтр по статусу (опционально)
+
+    Returns:
+        List[Dict]: Список рейсов
+    """
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await _ensure_schema(conn)
+        conn.row_factory = aiosqlite.Row
+
+        if status:
+            query = """
+                SELECT * FROM trips
+                WHERE phone = ? AND status = ?
+                ORDER BY created_at DESC
+            """
+            params = (phone, status)
+        else:
+            query = """
+                SELECT * FROM trips
+                WHERE phone = ?
+                ORDER BY created_at DESC
+            """
+            params = (phone,)
+
+        async with conn.execute(query, params) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
 
 
 async def get_trip(trip_id: int) -> Optional[Dict[str, Any]]:
     """
-    Получить информацию о рейсе по ID.
+    Получить рейс по ID.
 
     Args:
         trip_id: ID рейса
 
     Returns:
-        Dict | None: Словарь с информацией о рейсе или None если не найден
+        Dict | None: Данные рейса или None
     """
-    async with aiosqlite.connect(DB_PATH) as db:
-        await _ensure_schema(db)
-        db.row_factory = aiosqlite.Row
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await _ensure_schema(conn)
+        conn.row_factory = aiosqlite.Row
 
-        async with db.execute("""
+        async with conn.execute("""
             SELECT * FROM trips WHERE trip_id = ?
         """, (trip_id,)) as cursor:
             row = await cursor.fetchone()
-            if row:
-                return dict(row)
-
-    return None
-
-
-async def get_trip_by_number(trip_number: str) -> Optional[Dict[str, Any]]:
-    """
-    Получить информацию о рейсе по номеру.
-
-    Args:
-        trip_number: Номер рейса
-
-    Returns:
-        Dict | None: Словарь с информацией о рейсе или None если не найден
-    """
-    async with aiosqlite.connect(DB_PATH) as db:
-        await _ensure_schema(db)
-        db.row_factory = aiosqlite.Row
-
-        async with db.execute("""
-            SELECT * FROM trips WHERE trip_number = ?
-        """, (trip_number,)) as cursor:
-            row = await cursor.fetchone()
-            if row:
-                return dict(row)
-
-    return None
+            return dict(row) if row else None
 
 
 async def get_user_active_trips(user_id: int) -> List[Dict[str, Any]]:
@@ -206,16 +248,16 @@ async def get_user_active_trips(user_id: int) -> List[Dict[str, Any]]:
     Получить активные рейсы водителя.
 
     Args:
-        user_id: Telegram ID водителя
+        user_id: Telegram user_id
 
     Returns:
-        List[Dict]: Список активных рейсов (не completed, не cancelled)
+        List[Dict]: Список активных рейсов
     """
-    async with aiosqlite.connect(DB_PATH) as db:
-        await _ensure_schema(db)
-        db.row_factory = aiosqlite.Row
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await _ensure_schema(conn)
+        conn.row_factory = aiosqlite.Row
 
-        async with db.execute("""
+        async with conn.execute("""
             SELECT * FROM trips
             WHERE user_id = ? AND status NOT IN ('completed', 'cancelled')
             ORDER BY created_at DESC
@@ -224,211 +266,187 @@ async def get_user_active_trips(user_id: int) -> List[Dict[str, Any]]:
             return [dict(row) for row in rows]
 
 
-async def get_all_active_trips() -> List[Dict[str, Any]]:
+async def update_trip_user_id(trip_id: int, user_id: int) -> None:
     """
-    Получить все активные рейсы для отчета куратора.
+    Обновить user_id рейса (когда водитель регистрируется).
 
-    Returns:
-        List[Dict]: Список всех активных рейсов с информацией о водителях
+    Args:
+        trip_id: ID рейса
+        user_id: Telegram user_id водителя
     """
-    async with aiosqlite.connect(DB_PATH) as db:
-        await _ensure_schema(db)
-        db.row_factory = aiosqlite.Row
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await _ensure_schema(conn)
 
-        async with db.execute("""
-            SELECT t.*, d.phone
-            FROM trips t
-            LEFT JOIN drivers d ON t.user_id = d.user_id
-            WHERE t.status NOT IN ('completed', 'cancelled')
-            ORDER BY t.loading_date
-        """) as cursor:
-            rows = await cursor.fetchall()
-            return [dict(row) for row in rows]
+        await conn.execute("""
+            UPDATE trips SET user_id = ? WHERE trip_id = ?
+        """, (user_id, trip_id))
+
+        await conn.commit()
+
+    logger.info(f"Updated trip {trip_id} user_id to {user_id}")
+
+
+async def activate_trip(trip_id: int, activated_by: Optional[int] = None) -> None:
+    """
+    Активировать рейс (водителем или куратором).
+
+    Args:
+        trip_id: ID рейса
+        activated_by: Кто активировал (user_id)
+    """
+    await update_trip_status(trip_id, 'active', activated_by)
+
+    await log_trip_event(
+        trip_id=trip_id,
+        event_type="activated",
+        description="Рейс активирован",
+        created_by=activated_by
+    )
+
+    logger.info(f"Trip {trip_id} activated by {activated_by}")
 
 
 async def update_trip_status(
     trip_id: int,
-    status: str,
-    user_id: Optional[int] = None
+    new_status: str,
+    updated_by: Optional[int] = None
 ) -> None:
     """
     Обновить статус рейса.
 
     Args:
         trip_id: ID рейса
-        status: Новый статус (created, loading, in_transit, unloading, completed, cancelled)
-        user_id: ID пользователя, который меняет статус
-
-    Автоматически устанавливает временные метки:
-        - loading -> loading_confirmed_at
-        - unloading -> unloading_confirmed_at
-        - completed -> completed_at
+        new_status: Новый статус
+        updated_by: Кто обновил (user_id)
     """
-    async with aiosqlite.connect(DB_PATH) as db:
-        await _ensure_schema(db)
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await _ensure_schema(conn)
 
-        now = datetime.now().isoformat()
+        # Обновляем статус
+        await conn.execute("""
+            UPDATE trips SET status = ? WHERE trip_id = ?
+        """, (new_status, trip_id))
 
-        # Определяем, какие дополнительные поля обновить
-        updates = {"status": status}
-
-        if status == "loading":
-            updates["loading_confirmed_at"] = now
-        elif status == "unloading":
-            updates["unloading_confirmed_at"] = now
-        elif status == "completed":
-            updates["completed_at"] = now
-
-        # Формируем SET часть запроса
-        set_clause = ", ".join([f"{k} = ?" for k in updates.keys()])
-        values = list(updates.values()) + [trip_id]
-
-        await db.execute(f"""
-            UPDATE trips SET {set_clause} WHERE trip_id = ?
-        """, values)
-        await db.commit()
-
-        # Логируем изменение статуса
-        await log_trip_event(
-            trip_id=trip_id,
-            event_type="status_change",
-            description=f"Статус изменён на: {status}",
-            created_by=user_id,
-            metadata={"old_status": None, "new_status": status}
-        )
-
-    logger.info(f"Trip {trip_id} status updated to {status}")
-
-
-async def update_trip_documents_tracking(
-    trip_id: int,
-    tracking_number: Optional[str] = None,
-    received: bool = False
-) -> None:
-    """
-    Обновить информацию об отправке/получении документов.
-
-    Args:
-        trip_id: ID рейса
-        tracking_number: Трек-номер СДЭК (если документы отправлены)
-        received: True если документы получены в офисе
-    """
-    async with aiosqlite.connect(DB_PATH) as db:
-        await _ensure_schema(db)
-
-        if tracking_number:
-            await db.execute("""
-                UPDATE trips SET documents_sent = ? WHERE trip_id = ?
-            """, (tracking_number, trip_id))
-
-            await log_trip_event(
-                trip_id=trip_id,
-                event_type="documents_sent",
-                description=f"Документы отправлены через СДЭК: {tracking_number}",
-                metadata={"tracking_number": tracking_number}
-            )
-
-        if received:
-            await db.execute("""
-                UPDATE trips SET documents_received_at = ? WHERE trip_id = ?
+        # Обновляем соответствующие временные метки
+        if new_status == 'loading':
+            await conn.execute("""
+                UPDATE trips SET loading_confirmed_at = ? WHERE trip_id = ?
+            """, (datetime.now().isoformat(), trip_id))
+        elif new_status == 'unloading':
+            await conn.execute("""
+                UPDATE trips SET unloading_confirmed_at = ? WHERE trip_id = ?
+            """, (datetime.now().isoformat(), trip_id))
+        elif new_status == 'completed':
+            await conn.execute("""
+                UPDATE trips SET completed_at = ? WHERE trip_id = ?
             """, (datetime.now().isoformat(), trip_id))
 
-            await log_trip_event(
-                trip_id=trip_id,
-                event_type="documents_received",
-                description="Документы получены в офисе"
-            )
+        await conn.commit()
 
-        await db.commit()
+    # Логируем событие
+    await log_trip_event(
+        trip_id=trip_id,
+        event_type="status_changed",
+        description=f"Статус изменен на: {new_status}",
+        created_by=updated_by
+    )
+
+    logger.info(f"Trip {trip_id} status updated to {new_status}")
 
 
 async def log_trip_event(
     trip_id: int,
     event_type: str,
-    description: str,
+    description: Optional[str] = None,
     created_by: Optional[int] = None,
-    metadata: Optional[Dict[str, Any]] = None
-) -> int:
+    metadata: Optional[str] = None
+) -> None:
     """
     Логировать событие рейса.
 
     Args:
         trip_id: ID рейса
-        event_type: Тип события (created, loading_start, status_change, etc.)
+        event_type: Тип события
         description: Описание события
-        created_by: ID пользователя, создавшего событие
-        metadata: Дополнительные данные (будут сохранены как JSON)
-
-    Returns:
-        int: ID созданного события
+        created_by: Кто создал событие (user_id)
+        metadata: Дополнительные данные (JSON)
     """
-    async with aiosqlite.connect(DB_PATH) as db:
-        await _ensure_schema(db)
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await _ensure_schema(conn)
 
-        metadata_json = json.dumps(metadata) if metadata else None
-
-        cursor = await db.execute("""
-            INSERT INTO trip_events (trip_id, event_type, description, created_at, created_by, metadata)
-            VALUES (?, ?, ?, ?, ?, ?)
+        await conn.execute("""
+            INSERT INTO trip_events (
+                trip_id, event_type, description, created_at, created_by, metadata
+            ) VALUES (?, ?, ?, ?, ?, ?)
         """, (
-            trip_id,
-            event_type,
-            description,
-            datetime.now().isoformat(),
-            created_by,
-            metadata_json
+            trip_id, event_type, description,
+            datetime.now().isoformat(), created_by, metadata
         ))
 
-        event_id = cursor.lastrowid
-        await db.commit()
+        await conn.commit()
 
-    logger.info(f"Logged event '{event_type}' for trip {trip_id}")
-    return event_id
+    logger.debug(f"Logged event '{event_type}' for trip {trip_id}")
 
 
-async def get_trip_events(trip_id: int) -> List[Dict[str, Any]]:
+async def get_trip_events(trip_id: int, limit: int = 100) -> List[Dict[str, Any]]:
     """
-    Получить историю событий рейса.
+    Получить события рейса.
 
     Args:
         trip_id: ID рейса
+        limit: Максимальное количество событий
 
     Returns:
-        List[Dict]: Список событий в хронологическом порядке
+        List[Dict]: Список событий
     """
-    async with aiosqlite.connect(DB_PATH) as db:
-        await _ensure_schema(db)
-        db.row_factory = aiosqlite.Row
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await _ensure_schema(conn)
+        conn.row_factory = aiosqlite.Row
 
-        async with db.execute("""
+        async with conn.execute("""
             SELECT * FROM trip_events
             WHERE trip_id = ?
-            ORDER BY created_at ASC
-        """, (trip_id,)) as cursor:
+            ORDER BY created_at DESC
+            LIMIT ?
+        """, (trip_id, limit)) as cursor:
             rows = await cursor.fetchall()
-            events = []
-            for row in rows:
-                event = dict(row)
-                # Распарсить JSON metadata
-                if event['metadata']:
-                    try:
-                        event['metadata'] = json.loads(event['metadata'])
-                    except:
-                        pass
-                events.append(event)
-            return events
+            return [dict(row) for row in rows]
 
 
-async def _ensure_schema(db: aiosqlite.Connection) -> None:
-    """Вспомогательная функция для обеспечения наличия схемы БД."""
-    # Проверить, что таблицы существуют
-    cursor = await db.execute("""
-        SELECT name FROM sqlite_master
-        WHERE type='table' AND name IN ('trips', 'trip_events')
-    """)
-    tables = await cursor.fetchall()
+async def get_all_trips(
+    status: Optional[str] = None,
+    curator_id: Optional[int] = None,
+    limit: int = 100
+) -> List[Dict[str, Any]]:
+    """
+    Получить все рейсы с фильтрацией.
 
-    if len(tables) < 2:
-        # Пере-инициализируем БД если таблиц нет
-        logger.warning("Trips database tables not found, re-initializing...")
-        await init_trips_db()
+    Args:
+        status: Фильтр по статусу
+        curator_id: Фильтр по куратору
+        limit: Максимальное количество
+
+    Returns:
+        List[Dict]: Список рейсов
+    """
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await _ensure_schema(conn)
+        conn.row_factory = aiosqlite.Row
+
+        query = "SELECT * FROM trips WHERE 1=1"
+        params = []
+
+        if status:
+            query += " AND status = ?"
+            params.append(status)
+
+        if curator_id:
+            query += " AND curator_id = ?"
+            params.append(curator_id)
+
+        query += " ORDER BY created_at DESC LIMIT ?"
+        params.append(limit)
+
+        async with conn.execute(query, params) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]

@@ -1,5 +1,4 @@
 from .contact import router as contact_router
-from .documents import router as documents_router
-from .trips import router as trips_router
-from .admin import router as admin_router
+from .curator import router as curator_router
+from .driver_trips import router as driver_trips_router
 
