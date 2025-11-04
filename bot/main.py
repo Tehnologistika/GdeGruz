@@ -23,6 +23,8 @@ from bot.handlers.contact import router as contact_router
 from bot.handlers.stop import router as stop_router
 from bot.handlers.resume import router as resume_router
 from bot.handlers.redeploy import redeploy
+from bot.handlers.curator import router as curator_router
+from bot.handlers.driver_trips import router as driver_trips_router
 from db import get_phone, is_active
 
 # === intervals (in hours) ===
@@ -171,6 +173,8 @@ async def main() -> None:
         dp.include_router(contact_router)
         dp.include_router(stop_router)
         dp.include_router(resume_router)
+        dp.include_router(curator_router)
+        dp.include_router(driver_trips_router)
 
         # запускаем фоновый цикл напоминаний
         reminder_task = asyncio.create_task(remind_every_12h(bot))
