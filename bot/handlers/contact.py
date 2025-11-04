@@ -94,7 +94,7 @@ async def save_contact(msg: Message) -> None:
 
 # /help handler
 @router.message(Command("help"))
-@router.message(lambda m: m.text and m.text.lower() == "помощь")
+@router.message(F.text.in_(["❓ Помощь", "Помощь", "помощь"]))
 async def ask_help(msg: Message) -> None:
     """Водитель просит связаться. Дублируем запрос в диспетчерскую группу."""
     user = msg.from_user.id
