@@ -11,7 +11,7 @@ from typing import Optional, List, Dict, Any
 import logging
 
 logger = logging.getLogger(__name__)
-DB_PATH = Path("/home/user/GdeGruz/userdata/documents.db")
+DB_PATH = Path("/app/data/documents.db")
 
 # Типы документов
 DOC_TYPES = {

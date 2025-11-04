@@ -164,6 +164,11 @@ async def main() -> None:
     tz_name = os.getenv("TIMEZONE", "Europe/Moscow")
     _ = ZoneInfo(tz_name)  # просто чтобы упасть раньше, если TZ неверная
 
+    # Инициализируем базы данных
+    await db.init()
+    await db_trips.init()
+    # db_documents.init() - не используется в упрощенной системе
+
     # Создаем бота (aiogram 3.0.0 не поддерживает async with)
     bot = Bot(BOT_TOKEN)
     dp = Dispatcher(storage=MemoryStorage())

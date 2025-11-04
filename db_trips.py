@@ -16,7 +16,7 @@ import aiosqlite
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = Path("/home/git/fleet-live-bot/userdata/trips.db")
+DB_PATH = Path("/app/data/trips.db")
 
 
 async def init() -> None:
