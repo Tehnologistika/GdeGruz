@@ -313,14 +313,13 @@ async def process_trip_data(message: Message, state: FSMContext):
         # Формируем клавиатуру
         kb = InlineKeyboardBuilder()
         kb.button(text="✏️ Редактировать", callback_data=f"edit_trip:{trip_id}")
-        kb.button(text="📞 Позвонить", url=f"tel:{phone}")
 
         if user_id:
             kb.button(text="🚀 Активировать", callback_data=f"activate_trip:{trip_id}")
 
         kb.button(text="🗑 Удалить", callback_data=f"delete_trip:{trip_id}")
         kb.button(text="◀️ Список рейсов", callback_data="list_trips")
-        kb.adjust(2, 2, 1)
+        kb.adjust(1, 1, 1, 1)
 
         # Определяем статус
         if user_id:
@@ -409,10 +408,9 @@ async def activate_trip_callback(callback: CallbackQuery):
         # Обновляем сообщение
         kb = InlineKeyboardBuilder()
         kb.button(text="✏️ Редактировать", callback_data=f"edit_trip:{trip_id}")
-        kb.button(text="📞 Позвонить", url=f"tel:{trip['phone']}")
         kb.button(text="📋 Открыть", callback_data=f"view_trip:{trip_id}")
         kb.button(text="◀️ Назад", callback_data="list_trips")
-        kb.adjust(2, 2)
+        kb.adjust(2, 1)
 
         await callback.message.edit_text(
             f"✅ <b>Рейс активирован!</b>\n\n"
@@ -502,14 +500,13 @@ async def view_trip_callback(callback: CallbackQuery):
         kb = InlineKeyboardBuilder()
         kb.button(text="✏️ Редактировать", callback_data=f"edit_trip:{trip_id}")
         kb.button(text="📍 Запросить место", callback_data=f"request_location:{trip_id}")
-        kb.button(text="📞 Позвонить", url=f"tel:{trip['phone']}")
 
         if trip['status'] not in ['completed', 'cancelled']:
             kb.button(text="✅ Завершить", callback_data=f"complete_trip:{trip_id}")
 
         kb.button(text="📋 История", callback_data=f"trip_history:{trip_id}")
         kb.button(text="◀️ Назад", callback_data="list_trips")
-        kb.adjust(2, 2, 2, 1)
+        kb.adjust(2, 1, 1, 1)
 
         await callback.message.edit_text(
             f"🚚 <b>Рейс #{trip['trip_number']}</b>\n"
