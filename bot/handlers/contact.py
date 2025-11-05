@@ -9,7 +9,8 @@ import os
 from aiogram.filters import Command
 from db import get_phone
 
-GROUP_CHAT_ID = int(os.getenv("GROUP_CHAT_ID", "0"))
+GROUP_CHAT_ID_STR = os.getenv("GROUP_CHAT_ID")
+GROUP_CHAT_ID = int(GROUP_CHAT_ID_STR) if GROUP_CHAT_ID_STR else None
 from ..keyboards import location_kb
 
 logger = logging.getLogger(__name__)

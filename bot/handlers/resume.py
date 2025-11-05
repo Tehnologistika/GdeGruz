@@ -15,7 +15,8 @@ import logging
 from db import set_active, get_phone
 from bot.keyboards import location_kb
 
-GROUP_CHAT_ID = int(os.getenv("GROUP_CHAT_ID", "0"))
+GROUP_CHAT_ID_STR = os.getenv("GROUP_CHAT_ID")
+GROUP_CHAT_ID = int(GROUP_CHAT_ID_STR) if GROUP_CHAT_ID_STR else None
 
 router = Router(name=__name__)
 

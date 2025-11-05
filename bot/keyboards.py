@@ -26,7 +26,8 @@ def location_kb() -> ReplyKeyboardMarkup:
     kb.button(text="📤 Отправить документы")
     kb.button(text="📋 Мой рейс")
     kb.button(text="❓ Помощь")
-    kb.adjust(1, 2, 1)
+    kb.button(text="🛑 Закончить отслеживание")
+    kb.adjust(1, 2, 1, 1)
     return kb.as_markup(resize_keyboard=True)
 
 

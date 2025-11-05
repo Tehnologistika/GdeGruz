@@ -15,12 +15,13 @@ from bot.keyboards import resume_kb
 from db import get_phone, set_active
 
 import os
-GROUP_CHAT_ID = int(os.getenv("GROUP_CHAT_ID", "0"))
+GROUP_CHAT_ID_STR = os.getenv("GROUP_CHAT_ID")
+GROUP_CHAT_ID = int(GROUP_CHAT_ID_STR) if GROUP_CHAT_ID_STR else None
 
 router = Router(name=__name__)
 
 
-@router.message(F.text == "Закончить отслеживание")
+@router.message(F.text.in_(["🛑 Закончить отслеживание", "Закончить отслеживание"]))
 async def stop_tracking(message: types.Message):
     """
     Driver pressed “Закончить отслеживание”.
