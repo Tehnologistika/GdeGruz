@@ -51,28 +51,33 @@ async def save_contact(msg: Message, state: FSMContext) -> None:
     3. Если есть но имени нет → запрашиваем имя
     4. Если нет → создаем запись и запрашиваем имя
     """
+    from db import normalize_phone
+
     phone = msg.contact.phone_number
     user_id = msg.from_user.id
 
+    # Нормализуем телефон для использования в системе
+    normalized_phone = normalize_phone(phone)
+
     # Проверяем, существует ли водитель с таким телефоном
-    existing_driver = await get_driver_by_phone(phone)
+    existing_driver = await get_driver_by_phone(normalized_phone)
 
     if existing_driver and existing_driver.get('name'):
         # Водитель уже зарегистрирован - приветствуем по имени
         driver_name = existing_driver['name']
 
         # Обновляем телефон (может быть новый user_id)
-        await save_phone(user_id, phone, driver_name)
+        await save_phone(user_id, normalized_phone, driver_name)
 
         # Проверяем назначенные рейсы
         import db_trips
-        assigned_trips = await db_trips.get_trips_by_phone(phone, status='assigned')
+        assigned_trips = await db_trips.get_trips_by_phone(normalized_phone, status='assigned')
 
         if not assigned_trips:
             # Нет новых рейсов
             await msg.answer(
                 f"👋 Рады видеть вас снова, {driver_name}!\n\n"
-                f"📞 Номер {phone} подтвержден.\n"
+                f"📞 Номер {normalized_phone} подтвержден.\n"
                 f"Новых рейсов пока нет.\n\n"
                 f"Ожидайте назначения от куратора.",
                 reply_markup=location_kb()
@@ -85,7 +90,7 @@ async def save_contact(msg: Message, state: FSMContext) -> None:
                         GROUP_CHAT_ID,
                         f"🔄 **Водитель вернулся в систему**\n\n"
                         f"👤 {driver_name}\n"
-                        f"📞 {phone}\n"
+                        f"📞 {normalized_phone}\n"
                         f"🆔 User ID: {user_id}\n"
                         f"🕐 {datetime.now().strftime('%d.%m.%Y %H:%M')}",
                         parse_mode="Markdown"
@@ -107,7 +112,7 @@ async def save_contact(msg: Message, state: FSMContext) -> None:
 
             await msg.answer(
                 f"👋 Рады видеть вас снова, {driver_name}!\n\n"
-                f"📞 Номер {phone} подтвержден.\n"
+                f"📞 Номер {normalized_phone} подтвержден.\n"
                 f"🔍 Проверяю назначенные рейсы...\n\n"
                 f"✨ Найден рейс **#{trip['trip_number']}**!\n\n"
                 f"🚚 Рейс #{trip['trip_number']}\n"
@@ -125,15 +130,15 @@ async def save_contact(msg: Message, state: FSMContext) -> None:
     else:
         # Новый водитель или нет имени - запрашиваем имя
         # Сохраняем телефон в БД
-        await save_phone(user_id, phone)
+        await save_phone(user_id, normalized_phone)
 
         # Сохраняем данные в состояние
-        await state.update_data(phone=phone, user_id=user_id)
+        await state.update_data(phone=normalized_phone, user_id=user_id)
         await state.set_state(RegistrationStates.waiting_for_name)
 
         # Запрашиваем имя
         await msg.answer(
-            f"✅ Спасибо! Номер {phone} сохранён.\n\n"
+            f"✅ Спасибо! Номер {normalized_phone} сохранён.\n\n"
             f"📝 **Пожалуйста, напишите ваше имя**\n"
             f"(как к вам обращаться)",
             reply_markup=location_kb()
@@ -190,11 +195,15 @@ async def process_driver_name(msg: Message, state: FSMContext) -> None:
         # Уведомляем кураторов о новом водителе
         if GROUP_CHAT_ID:
             try:
+                # Получаем нормализованный номер из состояния
+                data = await state.get_data()
+                phone_normalized = data.get('phone', '')
+
                 await msg.bot.send_message(
                     GROUP_CHAT_ID,
                     f"🆕 **Новый водитель зарегистрировался**\n\n"
                     f"👤 {driver_name}\n"
-                    f"📞 {phone}\n"
+                    f"📞 {phone_normalized}\n"
                     f"🆔 User ID: {user_id}\n"
                     f"🕐 {datetime.now().strftime('%d.%m.%Y %H:%M')}",
                     parse_mode="Markdown"
@@ -235,11 +244,15 @@ async def process_driver_name(msg: Message, state: FSMContext) -> None:
         # Уведомляем кураторов
         if GROUP_CHAT_ID:
             try:
+                # Получаем нормализованный номер из состояния
+                data = await state.get_data()
+                phone_normalized = data.get('phone', '')
+
                 await msg.bot.send_message(
                     GROUP_CHAT_ID,
                     f"🆕 **Новый водитель + рейс активирован**\n\n"
                     f"👤 {driver_name}\n"
-                    f"📞 {phone}\n"
+                    f"📞 {phone_normalized}\n"
                     f"🚚 Рейс #{trip['trip_number']}\n"
                     f"🕐 {datetime.now().strftime('%d.%m.%Y %H:%M')}",
                     parse_mode="Markdown"
