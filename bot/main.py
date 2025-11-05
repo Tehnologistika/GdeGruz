@@ -162,33 +162,35 @@ async def main() -> None:
     tz_name = os.getenv("TIMEZONE", "Europe/Moscow")
     _ = ZoneInfo(tz_name)  # просто чтобы упасть раньше, если TZ неверная
 
-    # ВАЖНО: контекст-менеджер сам закроет сессию бота
-    async with Bot(BOT_TOKEN) as bot:
-        dp = Dispatcher(storage=MemoryStorage())
+    # Создаем Bot и Dispatcher
+    bot = Bot(BOT_TOKEN)
+    dp = Dispatcher(storage=MemoryStorage())
 
-        # регистрируем обработчики
-        dp.message.register(start, CommandStart())
-        dp.message.register(redeploy, Command("redeploy"))
-        dp.include_router(location_router)
-        dp.include_router(contact_router)
-        dp.include_router(stop_router)
-        dp.include_router(resume_router)
-        dp.include_router(curator_router)
-        dp.include_router(driver_trips_router)
+    # регистрируем обработчики
+    dp.message.register(start, CommandStart())
+    dp.message.register(redeploy, Command("redeploy"))
+    dp.include_router(location_router)
+    dp.include_router(contact_router)
+    dp.include_router(stop_router)
+    dp.include_router(resume_router)
+    dp.include_router(curator_router)
+    dp.include_router(driver_trips_router)
 
-        # запускаем фоновый цикл напоминаний
-        reminder_task = asyncio.create_task(remind_every_12h(bot))
+    # запускаем фоновый цикл напоминаний
+    reminder_task = asyncio.create_task(remind_every_12h(bot))
 
+    try:
+        logger.info("🚀 Starting polling")
+        await dp.start_polling(bot)
+    finally:
+        # корректная остановка фоновой задачи
+        reminder_task.cancel()
         try:
-            logger.info("🚀 Starting polling")
-            await dp.start_polling(bot)
-        finally:
-            # корректная остановка фоновой задачи
-            reminder_task.cancel()
-            try:
-                await reminder_task
-            except asyncio.CancelledError:
-                pass
+            await reminder_task
+        except asyncio.CancelledError:
+            pass
+        # Закрываем сессию бота
+        await bot.session.close()
 
     logger.info("🛑 Bot stopped")
 
