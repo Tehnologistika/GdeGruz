@@ -327,3 +327,83 @@ async def trip_details(callback: CallbackQuery):
     except Exception as e:
         logger.error(f"Failed to show details: {e}", exc_info=True)
         await callback.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
+
+
+# ============================================================================
+# Обработчик кнопки "Отправить документы"
+# ============================================================================
+
+@router.message(F.text == "📤 Отправить документы")
+async def request_documents(message: Message):
+    """Обработчик кнопки 'Отправить документы'."""
+    await message.answer(
+        "📤 <b>Отправка документов</b>\n\n"
+        "Отправьте документы в виде:\n"
+        "• Фотографий\n"
+        "• PDF файлов\n"
+        "• Других файлов\n\n"
+        "Вы можете отправить несколько документов подряд.\n"
+        "Они будут автоматически переданы куратору.",
+        parse_mode="HTML"
+    )
+
+
+@router.message(F.document | F.photo)
+async def handle_document(message: Message):
+    """Обработка полученных документов от водителя."""
+    import os
+
+    # Получаем GROUP_CHAT_ID для отправки кураторам
+    GROUP_CHAT_ID = int(os.getenv("GROUP_CHAT_ID", "0"))
+
+    if not GROUP_CHAT_ID:
+        await message.answer(
+            "❌ Не настроен GROUP_CHAT_ID для отправки документов.\n"
+            "Обратитесь к администратору."
+        )
+        return
+
+    try:
+        # Получаем информацию о водителе
+        from db import get_driver_by_user_id
+        driver_info = await get_driver_by_user_id(message.from_user.id)
+
+        driver_name = driver_info.get('name', 'Неизвестный') if driver_info else 'Неизвестный'
+        driver_phone = driver_info.get('phone', '') if driver_info else ''
+
+        # Формируем caption для куратора
+        caption = (
+            f"📄 <b>Документ от водителя</b>\n\n"
+            f"👤 {driver_name}\n"
+            f"📞 {driver_phone}\n"
+            f"🆔 User ID: {message.from_user.id}"
+        )
+
+        # Пересылаем документ/фото кураторам
+        if message.document:
+            await message.bot.send_document(
+                GROUP_CHAT_ID,
+                message.document.file_id,
+                caption=caption,
+                parse_mode="HTML"
+            )
+        elif message.photo:
+            await message.bot.send_photo(
+                GROUP_CHAT_ID,
+                message.photo[-1].file_id,  # Берем самое большое фото
+                caption=caption,
+                parse_mode="HTML"
+            )
+
+        # Подтверждаем водителю
+        await message.answer(
+            "✅ Документ отправлен куратору!",
+            parse_mode="HTML"
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to forward document: {e}", exc_info=True)
+        await message.answer(
+            "❌ Ошибка при отправке документа. Попробуйте еще раз."
+        )
+
