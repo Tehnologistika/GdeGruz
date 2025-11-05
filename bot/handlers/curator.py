@@ -979,10 +979,37 @@ async def back_to_admin_callback(callback: CallbackQuery):
 
 
 @router.callback_query(F.data == "new_trip")
-async def new_trip_callback(callback: CallbackQuery):
+async def new_trip_callback(callback: CallbackQuery, state: FSMContext):
     """Создать новый рейс через callback."""
+    if not is_curator(callback.from_user.id):
+        await callback.answer("❌ Недостаточно прав", show_alert=True)
+        return
+
+    # Запускаем процесс создания рейса
+    await state.set_state(CreateTripStates.waiting_data)
+
     await callback.message.answer(
-        "Для создания нового рейса используйте команду /create_trip"
+        "➕ <b>Создание рейса</b>\n\n"
+        "Отправьте данные одним сообщением:\n\n"
+        "```\n"
+        "Телефон водителя\n"
+        "Адрес загрузки\n"
+        "Адрес выгрузки\n"
+        "Дата загрузки (ДД.ММ)\n"
+        "Дата выгрузки (ДД.ММ)\n"
+        "Ставка\n"
+        "```\n\n"
+        "<b>Пример:</b>\n"
+        "```\n"
+        "+79991234567\n"
+        "Москва, ул. Ленина 1\n"
+        "Санкт-Петербург, пр. Невский 10\n"
+        "20.11\n"
+        "21.11\n"
+        "50000\n"
+        "```",
+        parse_mode="HTML",
+        reply_markup=cancel_kb()
     )
     await callback.answer()
 
