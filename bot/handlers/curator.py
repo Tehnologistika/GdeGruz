@@ -1001,9 +1001,61 @@ async def list_completed_trips_callback(callback: CallbackQuery):
 @router.callback_query(F.data == "back_to_admin")
 async def back_to_admin_callback(callback: CallbackQuery):
     """Вернуться к админ-панели."""
-    # Просто вызываем admin_panel через Message wrapper
-    await admin_panel(callback.message)
-    await callback.answer()
+    # ВАЖНО: используем callback.from_user.id, а не message.from_user.id
+    # потому что callback.message - это сообщение БОТА, а не пользователя
+    if not is_curator(callback.from_user.id):
+        await callback.answer("❌ Недостаточно прав", show_alert=True)
+        return
+
+    try:
+        # Получаем статистику
+        all_trips = await db_trips.get_all_trips(limit=1000)
+
+        # Считаем по статусам
+        stats = {
+            'assigned': 0,
+            'active': 0,
+            'loading': 0,
+            'in_transit': 0,
+            'unloading': 0,
+            'completed': 0,
+            'total': len(all_trips)
+        }
+
+        for trip in all_trips:
+            status = trip.get('status', 'unknown')
+            if status in stats:
+                stats[status] += 1
+
+        # Формируем админ-панель
+        kb = InlineKeyboardBuilder()
+        kb.button(text="➕ Создать рейс", callback_data="new_trip")
+        kb.button(text="📋 Активные рейсы", callback_data="list_active_trips")
+        kb.button(text="📊 Все рейсы", callback_data="list_trips")
+        kb.button(text="✅ Завершенные", callback_data="list_completed_trips")
+        kb.button(text="📈 Статистика", callback_data="show_stats")
+        kb.adjust(1, 2, 2, 1)
+
+        # Используем edit_text вместо answer, т.к. это inline callback
+        await callback.message.edit_text(
+            "🎛 **Панель управления рейсами**\n\n"
+            f"📊 Статистика:\n"
+            f"• ⏳ Назначено: {stats['assigned']}\n"
+            f"• 🟢 Активно: {stats['active']}\n"
+            f"• 📦 Погрузка: {stats['loading']}\n"
+            f"• 🚚 В пути: {stats['in_transit']}\n"
+            f"• 📥 Выгрузка: {stats['unloading']}\n"
+            f"• ✅ Завершено: {stats['completed']}\n"
+            f"• 📌 Всего: {stats['total']}\n\n"
+            f"Выберите действие:",
+            reply_markup=kb.as_markup(),
+            parse_mode="Markdown"
+        )
+        await callback.answer()
+
+    except Exception as e:
+        logger.error(f"Failed to show admin panel from callback: {e}", exc_info=True)
+        await callback.answer("❌ Ошибка загрузки панели управления", show_alert=True)
 
 
 @router.callback_query(F.data == "new_trip")
