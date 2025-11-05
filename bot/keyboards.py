@@ -36,3 +36,18 @@ def resume_kb() -> ReplyKeyboardMarkup:
     kb.button(text="Возобновить отслеживание")
     kb.adjust(1)
     return kb.as_markup(resize_keyboard=True)
+
+
+def curator_kb() -> ReplyKeyboardMarkup:
+    """
+    Клавиатура для кураторов рейсов.
+
+    Основная клавиатура для управления рейсами.
+    """
+    kb = ReplyKeyboardBuilder()
+    kb.button(text="➕ Создать рейс")
+    kb.button(text="📋 Активные рейсы")
+    kb.button(text="🎛 Панель управления")
+    kb.button(text="❓ Помощь")
+    kb.adjust(2, 1, 1)
+    return kb.as_markup(resize_keyboard=True)

@@ -983,3 +983,34 @@ async def trip_history_callback(callback: CallbackQuery):
     except Exception as e:
         logger.error(f"Failed to show history: {e}", exc_info=True)
         await callback.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
+
+
+# ============================================================================
+# Обработчики текстовых кнопок с клавиатуры куратора
+# ============================================================================
+
+@router.message(F.text == "➕ Создать рейс")
+async def text_create_trip(message: Message):
+    """Обработчик текстовой кнопки 'Создать рейс'."""
+    if not is_curator(message.from_user.id):
+        return
+    # Перенаправляем на команду /create_trip
+    await create_trip_command(message)
+
+
+@router.message(F.text == "📋 Активные рейсы")
+async def text_list_trips(message: Message):
+    """Обработчик текстовой кнопки 'Активные рейсы'."""
+    if not is_curator(message.from_user.id):
+        return
+    # Перенаправляем на команду /trips
+    await list_trips_command(message)
+
+
+@router.message(F.text == "🎛 Панель управления")
+async def text_admin_panel(message: Message):
+    """Обработчик текстовой кнопки 'Панель управления'."""
+    if not is_curator(message.from_user.id):
+        return
+    # Перенаправляем на команду /admin
+    await admin_panel(message)
