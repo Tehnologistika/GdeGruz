@@ -20,7 +20,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from bot.handlers.start import start
+from bot.handlers.start import router as start_router
 from bot.handlers.location import router as location_router
 from bot.handlers.contact import router as contact_router
 from bot.handlers.stop import router as stop_router
@@ -180,8 +180,8 @@ async def main() -> None:
     dp = Dispatcher(storage=MemoryStorage())
 
     # регистрируем обработчики
-    dp.message.register(start, CommandStart())
     dp.message.register(redeploy, Command("redeploy"))
+    dp.include_router(start_router)
     dp.include_router(location_router)
     dp.include_router(contact_router)
     dp.include_router(stop_router)

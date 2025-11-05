@@ -29,13 +29,18 @@ async def save_contact(msg: Message) -> None:
     """
     phone = msg.contact.phone_number
     user_id = msg.from_user.id
+    user_name = msg.from_user.full_name
+
+    logger.info("Contact received: user_id=%s, name=%s, phone=%s", user_id, user_name, phone)
 
     # Сохраняем телефон
     await save_phone(user_id, phone)
+    logger.info("Phone saved: user_id=%s -> phone=%s", user_id, phone)
 
     # Проверяем роль пользователя
     if is_curator(user_id):
         # Куратор - даём админ-панель
+        logger.info("User %s is CURATOR - showing curator keyboard", user_id)
         await msg.answer(
             f"✅ Номер {phone} сохранён.\n\n"
             f"🎛 Вы - куратор рейсов.\n"
@@ -45,8 +50,10 @@ async def save_contact(msg: Message) -> None:
         return
 
     # Водитель - проверяем, есть ли назначенные рейсы
+    logger.info("User %s is DRIVER - checking for assigned trips", user_id)
     import db_trips
     assigned_trips = await db_trips.get_trips_by_phone(phone, status='assigned')
+    logger.info("Found %s assigned trips for phone %s", len(assigned_trips) if assigned_trips else 0, phone)
 
     if not assigned_trips:
         # Нет назначенных рейсов
