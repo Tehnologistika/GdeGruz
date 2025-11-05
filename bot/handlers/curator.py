@@ -698,6 +698,58 @@ async def confirm_complete_callback(callback: CallbackQuery):
             except Exception as e:
                 logger.warning(f"Failed to notify driver: {e}")
 
+        # Уведомляем группы о завершении рейса
+        # Группа 1: Куратор Рейса
+        CURATOR_GROUP_ID = -1002606502231
+        # Группа 2: ГдеГруз Документы
+        DOCUMENTS_GROUP_ID = -5054329274
+
+        # Получаем информацию о водителе для уведомления
+        from db import get_driver_by_user_id
+        driver_info = None
+        if trip['user_id']:
+            try:
+                driver_info = await get_driver_by_user_id(trip['user_id'])
+            except Exception as e:
+                logger.warning(f"Failed to get driver info: {e}")
+
+        driver_name = driver_info.get('name', 'Неизвестный') if driver_info else 'Неизвестный'
+
+        # Формируем сообщение для групп
+        completion_message = (
+            f"✅ <b>Рейс завершен</b>\n\n"
+            f"🚚 Рейс: <b>#{trip['trip_number']}</b>\n"
+            f"👤 Водитель: {driver_name}\n"
+            f"📞 Телефон: {trip['phone']}\n\n"
+            f"📍 Маршрут:\n"
+            f"   {trip['loading_address']}\n"
+            f"   ↓\n"
+            f"   {trip['unloading_address']}\n\n"
+            f"📅 Даты: {trip['loading_date']} → {trip['unloading_date']}\n"
+            f"💰 Ставка: {trip['rate']:,.0f} ₽\n\n"
+            f"🕐 Завершен: {datetime.now().strftime('%d.%m.%Y %H:%M')}"
+        )
+
+        # Отправляем в группу "Куратор Рейса"
+        try:
+            await callback.bot.send_message(
+                CURATOR_GROUP_ID,
+                completion_message,
+                parse_mode="HTML"
+            )
+        except Exception as e:
+            logger.error(f"Failed to notify curator group: {e}")
+
+        # Отправляем в группу "ГдеГруз Документы"
+        try:
+            await callback.bot.send_message(
+                DOCUMENTS_GROUP_ID,
+                completion_message,
+                parse_mode="HTML"
+            )
+        except Exception as e:
+            logger.error(f"Failed to notify documents group: {e}")
+
         await callback.answer("✅ Рейс завершен!")
 
     except Exception as e:
