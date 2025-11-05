@@ -71,10 +71,10 @@ async def admin_panel(message: Message):
         stats = {
             'assigned': 0,
             'active': 0,
-            'loading': 0,
             'in_transit': 0,
-            'unloading': 0,
+            'delivered': 0,
             'completed': 0,
+            'cancelled': 0,
             'total': len(all_trips)
         }
 
@@ -97,10 +97,10 @@ async def admin_panel(message: Message):
             f"📊 Статистика:\n"
             f"• ⏳ Назначено: {stats['assigned']}\n"
             f"• 🟢 Активно: {stats['active']}\n"
-            f"• 📦 Погрузка: {stats['loading']}\n"
             f"• 🚚 В пути: {stats['in_transit']}\n"
-            f"• 📥 Выгрузка: {stats['unloading']}\n"
+            f"• 📦 Доставлено: {stats['delivered']}\n"
             f"• ✅ Завершено: {stats['completed']}\n"
+            f"• ❌ Отменено: {stats['cancelled']}\n"
             f"• 📌 Всего: {stats['total']}\n\n"
             f"Выберите действие:",
             reply_markup=kb.as_markup(),
@@ -1324,10 +1324,10 @@ async def back_to_admin_callback(callback: CallbackQuery):
         stats = {
             'assigned': 0,
             'active': 0,
-            'loading': 0,
             'in_transit': 0,
-            'unloading': 0,
+            'delivered': 0,
             'completed': 0,
+            'cancelled': 0,
             'total': len(all_trips)
         }
 
@@ -1351,10 +1351,10 @@ async def back_to_admin_callback(callback: CallbackQuery):
             f"📊 Статистика:\n"
             f"• ⏳ Назначено: {stats['assigned']}\n"
             f"• 🟢 Активно: {stats['active']}\n"
-            f"• 📦 Погрузка: {stats['loading']}\n"
             f"• 🚚 В пути: {stats['in_transit']}\n"
-            f"• 📥 Выгрузка: {stats['unloading']}\n"
+            f"• 📦 Доставлено: {stats['delivered']}\n"
             f"• ✅ Завершено: {stats['completed']}\n"
+            f"• ❌ Отменено: {stats['cancelled']}\n"
             f"• 📌 Всего: {stats['total']}\n\n"
             f"Выберите действие:",
             reply_markup=kb.as_markup(),
