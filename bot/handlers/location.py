@@ -23,7 +23,16 @@ async def handle_location(msg: Message):
 
     await save_point(user_id, lat, lon, ts)
 
+    # FIX: Очищаем эскалацию при получении локации
+    try:
+        from bot.main import escalation_sent
+        escalation_sent.pop(user_id, None)
+    except Exception:
+        pass  # Если main еще не загружен
+
     # дублируем в группу
+    GROUP_CHAT_ID_STR = os.getenv("GROUP_CHAT_ID")
+    GROUP_CHAT_ID = int(GROUP_CHAT_ID_STR) if GROUP_CHAT_ID_STR else None
     if GROUP_CHAT_ID:
         bot: Bot = msg.bot
         phone = await get_phone(user_id)

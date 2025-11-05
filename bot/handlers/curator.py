@@ -256,11 +256,18 @@ async def process_trip_data(message: Message, state: FSMContext):
     unloading_date = lines[4]
     rate = lines[5]
 
-    # Валидация телефона
-    if not phone.startswith("+7") or len(phone) != 12:
+    # Валидация телефона (международный формат)
+    import phonenumbers
+    try:
+        parsed_phone = phonenumbers.parse(phone, None)
+        if not phonenumbers.is_valid_number(parsed_phone):
+            raise ValueError("Invalid phone number")
+        # Нормализуем формат
+        phone = phonenumbers.format_number(parsed_phone, phonenumbers.PhoneNumberFormat.E164)
+    except Exception:
         await message.answer(
             "❌ Неверный формат телефона!\n"
-            "Должно быть: +79991234567\n\n"
+            "Примеры: +79991234567, +380501234567\n\n"
             "Попробуйте еще раз или /cancel"
         )
         return
@@ -471,9 +478,17 @@ async def view_trip_callback(callback: CallbackQuery):
         last_loc = await get_last_point(trip['user_id']) if trip['user_id'] else None
 
         if last_loc:
-            from datetime import datetime
-            last_time = datetime.fromisoformat(last_loc['ts'])
-            now = datetime.now()
+            from datetime import datetime, timezone
+            ts = last_loc['ts']
+            # ts уже datetime объект с timezone из db.get_last_point
+            if isinstance(ts, str):
+                last_time = datetime.fromisoformat(ts)
+            else:
+                last_time = ts
+            # Убеждаемся что last_time aware
+            if last_time.tzinfo is None:
+                last_time = last_time.replace(tzinfo=timezone.utc)
+            now = datetime.now(timezone.utc)
             delta = now - last_time
 
             if delta.total_seconds() < 3600:

@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -93,12 +93,16 @@ async def get_last_point(user_id: int):
         if row is None:
             return None
         id_, uid, lat, lon, ts_str = row
+        # Убеждаемся, что datetime всегда aware (с timezone)
+        dt = datetime.fromisoformat(ts_str)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
         return {
             "id": id_,
             "user_id": uid,
             "lat": lat,
             "lon": lon,
-            "ts": datetime.fromisoformat(ts_str),
+            "ts": dt,
         }
 
 
@@ -166,11 +170,14 @@ async def get_last_points() -> list[tuple[int, datetime]]:
         async with db.execute(query) as cur:
             rows = await cur.fetchall()
         # rows: list[(uid, ts_str)]
-        return [
-            (uid, datetime.fromisoformat(ts_str))
-            for uid, ts_str in rows
-            if ts_str is not None
-        ]
+        result = []
+        for uid, ts_str in rows:
+            if ts_str is not None:
+                dt = datetime.fromisoformat(ts_str)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                result.append((uid, dt))
+        return result
 
 # ---------------------------------------------------------------------------
 # tracking control helpers
@@ -194,14 +201,10 @@ async def set_active(user_id: int, flag: bool) -> None:
             (user_id, int(flag)),
         )
 
-        # 2) Если отслеживание вновь включено – очищаем предыдущие точки
-        if flag:
-            await db.execute("DELETE FROM points WHERE user_id = ?", (user_id,))
-
+        # FIX: Не удаляем историю - она важна для аналитики
         await db.commit()
 
-    logger.info("Set active=%s for %s (old points %s)",
-                flag, user_id, "purged" if flag else "kept")
+    logger.info("Set active=%s for %s (history preserved)", flag, user_id)
 
 
 async def is_active(user_id: int) -> bool:

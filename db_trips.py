@@ -151,9 +151,8 @@ async def create_trip_by_curator(
     import db
     user_id = await db.get_user_id_by_phone(phone)
 
-    # Если водитель не найден, ставим 0 (обновится при регистрации)
-    if not user_id:
-        user_id = 0
+    # FIX: Если водитель не найден, ставим NULL (обновится при регистрации)
+    # NULL лучше чем 0, т.к. 0 не валидный Telegram user_id
 
     async with aiosqlite.connect(DB_PATH) as conn:
         await _ensure_schema(conn)

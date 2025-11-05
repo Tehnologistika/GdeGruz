@@ -1,13 +1,12 @@
-import os, sys
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 import asyncio
 import logging
 import os
+import sys
 from datetime import datetime, timezone, timedelta
 from dateutil.parser import isoparse
 from zoneinfo import ZoneInfo
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 import aiosqlite
 import db
@@ -18,6 +17,8 @@ from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.filters import CommandStart, Command
 from dotenv import load_dotenv
+
+load_dotenv()
 
 from bot.handlers.start import start
 from bot.handlers.location import router as location_router
@@ -32,13 +33,13 @@ from db import get_phone, is_active
 # === intervals (in hours) ===
 REMIND_HOURS = float(os.getenv("REMIND_HOURS", "0.2"))  # default 0.2 h ≈ 12 min
 
-GROUP_CHAT_ID = int(os.getenv("GROUP_CHAT_ID", "0"))
+# FIX: GROUP_CHAT_ID может быть отрицательным (группы в Telegram)
+GROUP_CHAT_ID_STR = os.getenv("GROUP_CHAT_ID")
+GROUP_CHAT_ID = int(GROUP_CHAT_ID_STR) if GROUP_CHAT_ID_STR else None
 ESCALATE_DELAY = timedelta(hours=REMIND_HOURS + 2)  # reminder + 2 h
 
 # minutes to wait if DB fetch fails (at least 2 min, or REMIND_HOURS*60)
 POLL_MINUTES = max(int(REMIND_HOURS * 60), 2)
-
-load_dotenv()
 
 logging.basicConfig(
     level=logging.INFO,
@@ -78,7 +79,7 @@ async def remind_every_12h(bot: Bot) -> None:
                     logger.debug(
                         "reminder-loop: active users=%s (now=%s)", user_ids, now
                     )
-        except Exception as err:
+        except (aiosqlite.Error, OSError) as err:
             logger.exception("Failed to fetch user list: %s", err)
             await asyncio.sleep(POLL_MINUTES * 60)
             continue
@@ -146,12 +147,17 @@ async def remind_every_12h(bot: Bot) -> None:
             if time_since_last <= timedelta(hours=REMIND_HOURS):
                 escalation_sent.pop(uid, None)
 
+        # FIX 6: Очищаем старые записи эскалаций (>24 часов)
+        cutoff_time = now - timedelta(hours=24)
+        escalation_sent = {
+            uid: ts for uid, ts in escalation_sent.items()
+            if ts > cutoff_time
+        }
+
         await asyncio.sleep(max(int(REMIND_HOURS * 60), 2) * 60)
 
 
 async def main() -> None:
-    load_dotenv()
-
     # полезный стартовый лог
     logger.info(
         "Boot: REMIND_HOURS=%s TZ=%s DB=%s",
@@ -167,7 +173,7 @@ async def main() -> None:
     # Инициализируем базы данных
     await db.init()
     await db_trips.init()
-    # db_documents.init() - не используется в упрощенной системе
+    await db_documents.init_documents_db()
 
     # Создаем бота (aiogram 3.0.0 не поддерживает async with)
     bot = Bot(BOT_TOKEN)
@@ -203,8 +209,4 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    # гарантируем, что корень проекта попадает в PYTHONPATH
-    import sys
-
-    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
     asyncio.run(main())
