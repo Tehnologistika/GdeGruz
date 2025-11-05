@@ -1376,6 +1376,13 @@ async def new_trip_callback(callback: CallbackQuery):
     await callback.answer()
 
 
+@router.callback_query(F.data == "show_stats")
+async def show_stats_callback(callback: CallbackQuery):
+    """Показать статистику (просто возвращаемся в админ-панель)."""
+    # Статистика уже отображается в админ-панели, просто вызываем back_to_admin
+    await back_to_admin_callback(callback)
+
+
 @router.callback_query(F.data.startswith("trip_history:"))
 async def trip_history_callback(callback: CallbackQuery):
     """Показать историю рейса."""
