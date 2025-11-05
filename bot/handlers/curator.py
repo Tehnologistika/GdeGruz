@@ -779,6 +779,44 @@ async def confirm_complete_callback(callback: CallbackQuery):
             except Exception as e:
                 logger.warning(f"Failed to notify driver: {e}")
 
+        # Уведомляем группу о завершении рейса
+        NOTIFICATION_GROUP_ID = -1002606502231
+        try:
+            # Формируем полную карточку рейса
+            from datetime import datetime
+            completed_time = datetime.now().strftime('%d.%m.%Y %H:%M')
+
+            # Получаем имя куратора
+            curator_name = callback.from_user.full_name if callback.from_user else "Неизвестно"
+
+            notification_text = (
+                f"✅ **РЕЙС ЗАВЕРШЕН**\n\n"
+                f"🚚 **Рейс #{trip['trip_number']}**\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"📞 **Водитель:** {trip['phone']}\n"
+                f"🆔 **User ID:** {trip['user_id'] if trip['user_id'] else 'Не зарегистрирован'}\n\n"
+                f"📍 **Маршрут:**\n"
+                f"   🔵 Погрузка: {trip['loading_address']}\n"
+                f"   📅 {trip['loading_date']}\n\n"
+                f"   🔴 Выгрузка: {trip['unloading_address']}\n"
+                f"   📅 {trip['unloading_date']}\n\n"
+                f"💰 **Ставка:** {trip['rate']:,.0f} ₽\n\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"👤 **Завершил:** {curator_name}\n"
+                f"🕐 **Время завершения:** {completed_time}\n"
+                f"📊 **Создан:** {trip['created_at'][:10]}\n\n"
+                f"✅ Рейс успешно завершен! Отслеживание остановлено."
+            )
+
+            await callback.bot.send_message(
+                NOTIFICATION_GROUP_ID,
+                notification_text,
+                parse_mode="Markdown"
+            )
+            logger.info(f"Sent completion notification to group {NOTIFICATION_GROUP_ID} for trip #{trip['trip_number']}")
+        except Exception as e:
+            logger.error(f"Failed to send completion notification to group: {e}", exc_info=True)
+
         await callback.answer("✅ Рейс завершен!")
 
     except Exception as e:
