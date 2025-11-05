@@ -562,45 +562,83 @@ async def view_trip_callback(callback: CallbackQuery):
         else:
             loc_text = "нет данных"
 
-        # Статус эмодзи
-        status_map = {
-            'assigned': '⏳ Ожидает активации',
-            'active': '🟢 Активен',
-            'loading': '📦 Погрузка',
-            'in_transit': '🚚 В пути',
-            'unloading': '📥 Выгрузка',
-            'delivered': '📦 Доставлен',
-            'completed': '✅ Завершен',
-            'cancelled': '❌ Отменён'
+        # Визуализация прогресса рейса
+        progress_stages = {
+            'assigned': ('⏳', '⬜️', '⬜️', '⬜️', '⬜️'),
+            'active': ('✅', '🟢', '⬜️', '⬜️', '⬜️'),
+            'in_transit': ('✅', '✅', '🚚', '⬜️', '⬜️'),
+            'delivered': ('✅', '✅', '✅', '📦', '⬜️'),
+            'completed': ('✅', '✅', '✅', '✅', '✅'),
+            'cancelled': ('❌', '❌', '❌', '❌', '❌')
         }
-        status_text = status_map.get(trip['status'], trip['status'])
 
-        # Формируем кнопки
+        progress = progress_stages.get(trip['status'], ('⬜️', '⬜️', '⬜️', '⬜️', '⬜️'))
+        progress_bar = ' → '.join(progress)
+
+        status_descriptions = {
+            'assigned': '⏳ **Ожидает активации**\nВодитель ещё не поделился номером',
+            'active': '🟢 **Активен**\nВодитель готовится к погрузке',
+            'in_transit': '🚚 **В пути**\nГруз погружен, едет на выгрузку',
+            'delivered': '📦 **Доставлен**\nГруз выгружен, ожидаем оригиналы документов',
+            'completed': '✅ **Завершён**\nВсе документы получены, рейс закрыт',
+            'cancelled': '❌ **Отменён**'
+        }
+        status_text = status_descriptions.get(trip['status'], trip['status'])
+
+        # Получаем информацию о документах
+        import db_documents
+        docs_check = await db_documents.get_trip_documents_summary(trip_id)
+
+        # Формируем текст о документах
+        docs_text = "\n\n📄 **Документы:**\n"
+
+        # Документы погрузки
+        loading = docs_check['loading']
+        docs_text += f"{'✅' if loading['has_loading_photo'] else '❌'} Фото погрузки: {loading['loading_photo_count']}\n"
+        docs_text += f"{'✅' if loading['has_acceptance_act'] else '❌'} Акт приёма: {loading['acceptance_act_count']}\n"
+
+        # Документы выгрузки
+        unloading = docs_check['unloading']
+        docs_text += f"{'✅' if unloading['has_unloading_photo'] else '❌'} Фото выгрузки: {unloading['unloading_photo_count']}\n"
+        docs_text += f"{'✅' if unloading['has_invoice'] else '❌'} Накладные: {unloading['invoice_count']}"
+
+        # Формируем кнопки в зависимости от статуса
         kb = InlineKeyboardBuilder()
-        kb.button(text="✏️ Редактировать", callback_data=f"edit_trip:{trip_id}")
-        kb.button(text="📍 Запросить место", callback_data=f"request_location:{trip_id}")
 
-        # Кнопка "Груз доставлен" для рейсов в пути
-        if trip['status'] in ['in_transit', 'active']:
+        # Кнопки действий в зависимости от статуса
+        if trip['status'] == 'assigned':
+            kb.button(text="🚀 Активировать", callback_data=f"activate_trip:{trip_id}")
+        elif trip['status'] == 'active':
             kb.button(text="📦 Груз доставлен", callback_data=f"mark_delivered:{trip_id}")
+        elif trip['status'] == 'in_transit':
+            kb.button(text="📦 Груз доставлен", callback_data=f"mark_delivered:{trip_id}")
+        elif trip['status'] == 'delivered':
+            kb.button(text="✅ Завершить (с СДЭК)", callback_data=f"complete_trip:{trip_id}")
 
-        # Кнопка "Завершить" для всех незавершенных рейсов
-        if trip['status'] not in ['completed', 'cancelled']:
-            kb.button(text="✅ Завершить", callback_data=f"complete_trip:{trip_id}")
-
+        # Общие кнопки
+        kb.button(text="📍 Местоположение", callback_data=f"request_location:{trip_id}")
         kb.button(text="📋 История", callback_data=f"trip_history:{trip_id}")
+
+        # Кнопка отмены (для незавершенных рейсов)
+        if trip['status'] not in ['completed', 'cancelled']:
+            kb.button(text="❌ Отменить", callback_data=f"cancel_trip:{trip_id}")
+
         kb.button(text="◀️ Назад", callback_data="list_trips")
-        kb.adjust(2, 1, 1, 2)
+        kb.adjust(1, 2, 1, 1)
 
         await callback.message.edit_text(
-            f"🚚 **Рейс #{trip['trip_number']}**\n"
+            f"🚚 **Рейс #{trip['trip_number']}**\n\n"
             f"{status_text}\n\n"
+            f"**Прогресс:**\n{progress_bar}\n"
+            f"Назначен → Активен → В пути → Доставлен → Завершён\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n\n"
             f"📞 Водитель: {trip['phone']}\n"
-            f"📍 {trip['loading_address']}\n"
-            f"     ↓\n"
-            f"📍 {trip['unloading_address']}\n"
-            f"📅 {trip['loading_date']} → {trip['unloading_date']}\n"
-            f"💰 Ставка: {trip['rate']:,.0f} ₽\n\n"
+            f"📍 Откуда: {trip['loading_address']}\n"
+            f"📅 {trip['loading_date']}\n\n"
+            f"📍 Куда: {trip['unloading_address']}\n"
+            f"📅 {trip['unloading_date']}\n\n"
+            f"💰 Ставка: {trip['rate']:,.0f} ₽\n"
+            f"{docs_text}\n\n"
             f"📍 Последняя локация: {loc_text}\n"
             f"🕐 Создан: {trip['created_at'][:10]}",
             reply_markup=kb.as_markup(),
@@ -953,6 +991,107 @@ async def confirm_delivered(callback: CallbackQuery, trip_id: int):
 
     except Exception as e:
         logger.error(f"Failed to confirm delivery: {e}", exc_info=True)
+        await callback.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
+
+
+@router.callback_query(F.data.startswith("cancel_trip:"))
+async def cancel_trip_callback(callback: CallbackQuery):
+    """Отмена рейса куратором."""
+    if not is_curator(callback.from_user.id):
+        await callback.answer("❌ Недостаточно прав", show_alert=True)
+        return
+
+    trip_id = int(callback.data.split(":")[1])
+
+    try:
+        trip = await db_trips.get_trip(trip_id)
+        if not trip:
+            await callback.answer("❌ Рейс не найден", show_alert=True)
+            return
+
+        # Кнопки подтверждения
+        kb = InlineKeyboardBuilder()
+        kb.button(text="⚠️ Да, отменить", callback_data=f"confirm_cancel:{trip_id}")
+        kb.button(text="❌ Назад", callback_data=f"view_trip:{trip_id}")
+        kb.adjust(1, 1)
+
+        await callback.message.edit_text(
+            f"⚠️ **Отмена рейса #{trip['trip_number']}**\n\n"
+            f"📞 Водитель: {trip['phone']}\n"
+            f"📍 {trip['loading_address']} → {trip['unloading_address']}\n\n"
+            f"Вы уверены, что хотите отменить рейс?",
+            reply_markup=kb.as_markup(),
+            parse_mode="Markdown"
+        )
+
+        await callback.answer()
+
+    except Exception as e:
+        logger.error(f"Failed to prepare cancellation: {e}", exc_info=True)
+        await callback.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
+
+
+@router.callback_query(F.data.startswith("confirm_cancel:"))
+async def confirm_cancel_callback(callback: CallbackQuery):
+    """Подтверждение отмены рейса."""
+    if not is_curator(callback.from_user.id):
+        await callback.answer("❌ Недостаточно прав", show_alert=True)
+        return
+
+    trip_id = int(callback.data.split(":")[1])
+
+    try:
+        trip = await db_trips.get_trip(trip_id)
+        if not trip:
+            await callback.answer("❌ Рейс не найден", show_alert=True)
+            return
+
+        # Отменяем рейс
+        await db_trips.update_trip_status(
+            trip_id,
+            'cancelled',
+            callback.from_user.id,
+            comment="Рейс отменён куратором"
+        )
+
+        # Уведомляем куратора
+        await callback.message.edit_text(
+            f"❌ **Рейс #{trip['trip_number']} отменён**\n\n"
+            f"Рейс успешно отменён.",
+            parse_mode="Markdown"
+        )
+
+        # Уведомляем водителя
+        if trip['user_id'] and trip['user_id'] > 0:
+            try:
+                await callback.bot.send_message(
+                    trip['user_id'],
+                    f"❌ **Рейс #{trip['trip_number']} отменён**\n\n"
+                    f"К сожалению, рейс был отменён.\n"
+                    f"За подробностями обратитесь к куратору.",
+                    parse_mode="Markdown"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to notify driver: {e}")
+
+        # Уведомляем группу
+        if GROUP_CHAT_ID:
+            try:
+                await callback.bot.send_message(
+                    GROUP_CHAT_ID,
+                    f"❌ **РЕЙС ОТМЕНЁН**\n\n"
+                    f"🚚 Рейс #{trip['trip_number']}\n"
+                    f"📞 {trip['phone']}\n"
+                    f"👤 Отменил: {callback.from_user.full_name}",
+                    parse_mode="Markdown"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to notify group: {e}")
+
+        await callback.answer("❌ Рейс отменён")
+
+    except Exception as e:
+        logger.error(f"Failed to cancel trip: {e}", exc_info=True)
         await callback.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
 
 
