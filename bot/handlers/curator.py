@@ -1076,3 +1076,207 @@ async def text_admin_panel(message: Message):
         return
     # Перенаправляем на команду /admin
     await admin_panel(message)
+
+
+# ============================================================================
+# Обработчик редактирования рейса
+# ============================================================================
+
+@router.callback_query(F.data.startswith("edit_trip:"))
+async def edit_trip_callback(callback: CallbackQuery):
+    """Меню редактирования рейса."""
+    if not is_curator(callback.from_user.id):
+        await callback.answer("❌ Недостаточно прав", show_alert=True)
+        return
+
+    trip_id = int(callback.data.split(":")[1])
+
+    try:
+        trip = await db_trips.get_trip(trip_id)
+        if not trip:
+            await callback.answer("❌ Рейс не найден", show_alert=True)
+            return
+
+        # Формируем меню редактирования
+        kb = InlineKeyboardBuilder()
+        kb.button(text="📞 Изменить телефон", callback_data=f"edit_field:phone:{trip_id}")
+        kb.button(text="📍 Изменить адреса", callback_data=f"edit_field:addresses:{trip_id}")
+        kb.button(text="📅 Изменить даты", callback_data=f"edit_field:dates:{trip_id}")
+        kb.button(text="💰 Изменить ставку", callback_data=f"edit_field:rate:{trip_id}")
+        kb.button(text="◀️ Назад", callback_data=f"view_trip:{trip_id}")
+        kb.adjust(1)
+
+        await callback.message.edit_text(
+            f"✏️ <b>Редактирование рейса #{trip['trip_number']}</b>\n\n"
+            f"📞 Телефон: {trip['phone']}\n"
+            f"📍 Загрузка: {trip['loading_address']}\n"
+            f"📍 Выгрузка: {trip['unloading_address']}\n"
+            f"📅 Даты: {trip['loading_date']} → {trip['unloading_date']}\n"
+            f"💰 Ставка: {trip['rate']:,.0f} ₽\n\n"
+            f"Выберите, что хотите изменить:",
+            reply_markup=kb.as_markup(),
+            parse_mode="HTML"
+        )
+
+        await callback.answer()
+
+    except Exception as e:
+        logger.error(f"Failed to show edit menu: {e}", exc_info=True)
+        await callback.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
+
+
+@router.callback_query(F.data.startswith("edit_field:"))
+async def edit_field_start(callback: CallbackQuery, state: FSMContext):
+    """Начало редактирования конкретного поля."""
+    if not is_curator(callback.from_user.id):
+        await callback.answer("❌ Недостаточно прав", show_alert=True)
+        return
+
+    parts = callback.data.split(":")
+    field = parts[1]
+    trip_id = int(parts[2])
+
+    # Сохраняем trip_id в state
+    await state.update_data(edit_trip_id=trip_id, edit_field=field)
+
+    # Показываем инструкцию в зависимости от поля
+    instructions = {
+        "phone": "📞 Отправьте новый номер телефона в формате:\n<code>+79991234567</code>",
+        "addresses": "📍 Отправьте новые адреса в формате:\n<code>Адрес загрузки\nАдрес выгрузки</code>",
+        "dates": "📅 Отправьте новые даты в формате:\n<code>ДД.ММ\nДД.ММ</code>\n(дата загрузки и дата выгрузки)",
+        "rate": "💰 Отправьте новую ставку (только число):\n<code>50000</code>"
+    }
+
+    await callback.message.answer(
+        f"✏️ <b>Редактирование</b>\n\n{instructions[field]}\n\n"
+        f"Или /cancel для отмены",
+        parse_mode="HTML",
+        reply_markup=cancel_kb()
+    )
+
+    # Устанавливаем состояние ожидания
+    state_map = {
+        "phone": EditTripStates.waiting_phone,
+        "addresses": EditTripStates.waiting_addresses,
+        "dates": EditTripStates.waiting_dates,
+        "rate": EditTripStates.waiting_rate
+    }
+    await state.set_state(state_map[field])
+    await callback.answer()
+
+
+@router.message(EditTripStates.waiting_phone)
+async def process_edit_phone(message: Message, state: FSMContext):
+    """Обработка нового номера телефона."""
+    phone = message.text.strip()
+
+    # Валидация
+    if not phone.startswith("+7") or len(phone) != 12:
+        await message.answer("❌ Неверный формат! Используйте: +79991234567")
+        return
+
+    data = await state.get_data()
+    trip_id = data.get("edit_trip_id")
+
+    try:
+        await db_trips.update_trip_phone(trip_id, phone)
+        await state.clear()
+        await message.answer(
+            f"✅ Телефон обновлен на {phone}!\n\n"
+            f"Используйте /trips для просмотра рейсов."
+        )
+    except Exception as e:
+        logger.error(f"Failed to update phone: {e}", exc_info=True)
+        await message.answer(f"❌ Ошибка: {str(e)}")
+
+
+@router.message(EditTripStates.waiting_addresses)
+async def process_edit_addresses(message: Message, state: FSMContext):
+    """Обработка новых адресов."""
+    lines = [line.strip() for line in message.text.split("\n") if line.strip()]
+
+    if len(lines) != 2:
+        await message.answer("❌ Должно быть 2 строки:\n1. Адрес загрузки\n2. Адрес выгрузки")
+        return
+
+    loading_address = lines[0]
+    unloading_address = lines[1]
+
+    data = await state.get_data()
+    trip_id = data.get("edit_trip_id")
+
+    try:
+        await db_trips.update_trip_addresses(trip_id, loading_address, unloading_address)
+        await state.clear()
+        await message.answer(
+            f"✅ Адреса обновлены!\n\n"
+            f"📍 {loading_address}\n"
+            f"📍 {unloading_address}\n\n"
+            f"Используйте /trips для просмотра рейсов."
+        )
+    except Exception as e:
+        logger.error(f"Failed to update addresses: {e}", exc_info=True)
+        await message.answer(f"❌ Ошибка: {str(e)}")
+
+
+@router.message(EditTripStates.waiting_dates)
+async def process_edit_dates(message: Message, state: FSMContext):
+    """Обработка новых дат."""
+    lines = [line.strip() for line in message.text.split("\n") if line.strip()]
+
+    if len(lines) != 2:
+        await message.answer("❌ Должно быть 2 строки с датами в формате ДД.ММ")
+        return
+
+    loading_date = lines[0]
+    unloading_date = lines[1]
+
+    # Валидация дат
+    try:
+        from datetime import datetime
+        current_year = datetime.now().year
+        datetime.strptime(f"{loading_date}.{current_year}", "%d.%m.%Y")
+        datetime.strptime(f"{unloading_date}.{current_year}", "%d.%m.%Y")
+    except ValueError:
+        await message.answer("❌ Неверный формат даты! Используйте ДД.ММ (например: 20.11)")
+        return
+
+    data = await state.get_data()
+    trip_id = data.get("edit_trip_id")
+
+    try:
+        await db_trips.update_trip_dates(trip_id, loading_date, unloading_date)
+        await state.clear()
+        await message.answer(
+            f"✅ Даты обновлены!\n\n"
+            f"📅 {loading_date} → {unloading_date}\n\n"
+            f"Используйте /trips для просмотра рейсов."
+        )
+    except Exception as e:
+        logger.error(f"Failed to update dates: {e}", exc_info=True)
+        await message.answer(f"❌ Ошибка: {str(e)}")
+
+
+@router.message(EditTripStates.waiting_rate)
+async def process_edit_rate(message: Message, state: FSMContext):
+    """Обработка новой ставки."""
+    try:
+        rate = float(message.text.strip().replace(" ", "").replace(",", "."))
+    except ValueError:
+        await message.answer("❌ Неверный формат! Введите число (например: 50000)")
+        return
+
+    data = await state.get_data()
+    trip_id = data.get("edit_trip_id")
+
+    try:
+        await db_trips.update_trip_rate(trip_id, rate)
+        await state.clear()
+        await message.answer(
+            f"✅ Ставка обновлена на {rate:,.0f} ₽!\n\n"
+            f"Используйте /trips для просмотра рейсов."
+        )
+    except Exception as e:
+        logger.error(f"Failed to update rate: {e}", exc_info=True)
+        await message.answer(f"❌ Ошибка: {str(e)}")
+

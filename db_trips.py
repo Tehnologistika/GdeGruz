@@ -450,3 +450,60 @@ async def get_all_trips(
         async with conn.execute(query, params) as cursor:
             rows = await cursor.fetchall()
             return [dict(row) for row in rows]
+
+
+# ============================================================================
+# Функции для редактирования рейсов
+# ============================================================================
+
+async def update_trip_phone(trip_id: int, phone: str) -> None:
+    """Обновить номер телефона рейса."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "UPDATE trips SET phone = ? WHERE trip_id = ?",
+            (phone, trip_id)
+        )
+        await conn.commit()
+        logger.info(f"Updated phone for trip {trip_id} to {phone}")
+
+
+async def update_trip_addresses(
+    trip_id: int,
+    loading_address: str,
+    unloading_address: str
+) -> None:
+    """Обновить адреса рейса."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "UPDATE trips SET loading_address = ?, unloading_address = ? WHERE trip_id = ?",
+            (loading_address, unloading_address, trip_id)
+        )
+        await conn.commit()
+        logger.info(f"Updated addresses for trip {trip_id}")
+
+
+async def update_trip_dates(
+    trip_id: int,
+    loading_date: str,
+    unloading_date: str
+) -> None:
+    """Обновить даты рейса."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "UPDATE trips SET loading_date = ?, unloading_date = ? WHERE trip_id = ?",
+            (loading_date, unloading_date, trip_id)
+        )
+        await conn.commit()
+        logger.info(f"Updated dates for trip {trip_id}")
+
+
+async def update_trip_rate(trip_id: int, rate: float) -> None:
+    """Обновить ставку рейса."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "UPDATE trips SET rate = ? WHERE trip_id = ?",
+            (rate, trip_id)
+        )
+        await conn.commit()
+        logger.info(f"Updated rate for trip {trip_id} to {rate}")
+
