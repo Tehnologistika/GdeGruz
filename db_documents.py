@@ -17,6 +17,8 @@ DB_PATH = Path("/app/data/documents.db")
 DOC_TYPES = {
     "loading_photo": "📸 Фото погрузки",
     "unloading_photo": "📸 Фото выгрузки",
+    "acceptance_act": "📄 Акт приёма-передачи",
+    "invoice": "📄 Накладная",
     "ttn": "📄 ТТН",
     "upd": "📄 УПД",
     "other": "📄 Другой документ"
@@ -282,3 +284,130 @@ async def _ensure_schema(db: aiosqlite.Connection) -> None:
         # Пере-инициализируем БД если таблицы нет
         logger.warning("Documents database table not found, re-initializing...")
         await init_documents_db()
+
+
+async def check_loading_documents(trip_id: int) -> Dict[str, Any]:
+    """
+    Проверить наличие всех документов погрузки.
+
+    Для перехода в статус "В пути" требуется:
+    - Минимум 1 фото погрузки (loading_photo)
+    - Минимум 1 акт приёма-передачи (acceptance_act)
+
+    Args:
+        trip_id: ID рейса
+
+    Returns:
+        Dict с ключами:
+            - has_loading_photo: bool
+            - has_acceptance_act: bool
+            - loading_photo_count: int
+            - acceptance_act_count: int
+            - ready_for_transit: bool (все документы есть)
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        await _ensure_schema(db)
+
+        # Считаем фото погрузки
+        async with db.execute("""
+            SELECT COUNT(*) FROM documents
+            WHERE trip_id = ? AND doc_type = 'loading_photo'
+        """, (trip_id,)) as cursor:
+            row = await cursor.fetchone()
+            loading_photo_count = row[0] if row else 0
+
+        # Считаем акты приёма-передачи
+        async with db.execute("""
+            SELECT COUNT(*) FROM documents
+            WHERE trip_id = ? AND doc_type = 'acceptance_act'
+        """, (trip_id,)) as cursor:
+            row = await cursor.fetchone()
+            acceptance_act_count = row[0] if row else 0
+
+    has_loading_photo = loading_photo_count > 0
+    has_acceptance_act = acceptance_act_count > 0
+    ready_for_transit = has_loading_photo and has_acceptance_act
+
+    return {
+        'has_loading_photo': has_loading_photo,
+        'has_acceptance_act': has_acceptance_act,
+        'loading_photo_count': loading_photo_count,
+        'acceptance_act_count': acceptance_act_count,
+        'ready_for_transit': ready_for_transit
+    }
+
+
+async def check_unloading_documents(trip_id: int) -> Dict[str, Any]:
+    """
+    Проверить наличие всех документов выгрузки.
+
+    Для перехода в статус "Доставлен" рекомендуется:
+    - Минимум 1 фото выгрузки (unloading_photo)
+    - Минимум 1 накладная (invoice)
+
+    Args:
+        trip_id: ID рейса
+
+    Returns:
+        Dict с ключами:
+            - has_unloading_photo: bool
+            - has_invoice: bool
+            - unloading_photo_count: int
+            - invoice_count: int
+            - ready_for_delivery: bool (все документы есть)
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        await _ensure_schema(db)
+
+        # Считаем фото выгрузки
+        async with db.execute("""
+            SELECT COUNT(*) FROM documents
+            WHERE trip_id = ? AND doc_type = 'unloading_photo'
+        """, (trip_id,)) as cursor:
+            row = await cursor.fetchone()
+            unloading_photo_count = row[0] if row else 0
+
+        # Считаем накладные
+        async with db.execute("""
+            SELECT COUNT(*) FROM documents
+            WHERE trip_id = ? AND doc_type = 'invoice'
+        """, (trip_id,)) as cursor:
+            row = await cursor.fetchone()
+            invoice_count = row[0] if row else 0
+
+    has_unloading_photo = unloading_photo_count > 0
+    has_invoice = invoice_count > 0
+    ready_for_delivery = has_unloading_photo and has_invoice
+
+    return {
+        'has_unloading_photo': has_unloading_photo,
+        'has_invoice': has_invoice,
+        'unloading_photo_count': unloading_photo_count,
+        'invoice_count': invoice_count,
+        'ready_for_delivery': ready_for_delivery
+    }
+
+
+async def get_trip_documents_summary(trip_id: int) -> Dict[str, Any]:
+    """
+    Получить полную сводку по документам рейса.
+
+    Args:
+        trip_id: ID рейса
+
+    Returns:
+        Dict с ключами:
+            - loading: dict результата check_loading_documents()
+            - unloading: dict результата check_unloading_documents()
+            - all_complete: bool (все документы загружены)
+    """
+    loading = await check_loading_documents(trip_id)
+    unloading = await check_unloading_documents(trip_id)
+
+    all_complete = loading['ready_for_transit'] and unloading['ready_for_delivery']
+
+    return {
+        'loading': loading,
+        'unloading': unloading,
+        'all_complete': all_complete
+    }

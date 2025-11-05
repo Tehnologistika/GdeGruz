@@ -46,9 +46,17 @@ async def _ensure_schema(db: aiosqlite.Connection) -> None:
             loading_confirmed_at TEXT,
             unloading_confirmed_at TEXT,
             completed_at TEXT,
-            curator_id INTEGER
+            curator_id INTEGER,
+            sdek_tracking TEXT
         )
     """)
+
+    # Добавляем поле sdek_tracking если его нет (миграция)
+    try:
+        await db.execute("SELECT sdek_tracking FROM trips LIMIT 1")
+    except:
+        logger.info("Adding sdek_tracking column to trips table")
+        await db.execute("ALTER TABLE trips ADD COLUMN sdek_tracking TEXT")
 
     # Создать индекс по телефону
     await db.execute("""
@@ -308,16 +316,23 @@ async def activate_trip(trip_id: int, activated_by: Optional[int] = None) -> Non
 async def update_trip_status(
     trip_id: int,
     new_status: str,
-    updated_by: Optional[int] = None
+    updated_by: Optional[int] = None,
+    comment: Optional[str] = None
 ) -> None:
     """
-    Обновить статус рейса.
+    Обновить статус рейса с валидацией.
 
     Args:
         trip_id: ID рейса
         new_status: Новый статус
         updated_by: Кто обновил (user_id)
+        comment: Комментарий к изменению статуса
     """
+    # Валидация статуса
+    valid_statuses = ['assigned', 'active', 'in_transit', 'delivered', 'completed', 'cancelled']
+    if new_status not in valid_statuses:
+        raise ValueError(f"Invalid status: {new_status}. Must be one of: {', '.join(valid_statuses)}")
+
     async with aiosqlite.connect(DB_PATH) as conn:
         await _ensure_schema(conn)
 
@@ -327,26 +342,32 @@ async def update_trip_status(
         """, (new_status, trip_id))
 
         # Обновляем соответствующие временные метки
-        if new_status == 'loading':
+        now = datetime.now().isoformat()
+
+        if new_status == 'in_transit':
+            # Переход в "В пути" = погрузка завершена
             await conn.execute("""
                 UPDATE trips SET loading_confirmed_at = ? WHERE trip_id = ?
-            """, (datetime.now().isoformat(), trip_id))
-        elif new_status == 'unloading':
+            """, (now, trip_id))
+        elif new_status == 'delivered':
+            # Переход в "Доставлен" = выгрузка завершена
             await conn.execute("""
                 UPDATE trips SET unloading_confirmed_at = ? WHERE trip_id = ?
-            """, (datetime.now().isoformat(), trip_id))
+            """, (now, trip_id))
         elif new_status == 'completed':
+            # Переход в "Завершен" = оригиналы отправлены
             await conn.execute("""
                 UPDATE trips SET completed_at = ? WHERE trip_id = ?
-            """, (datetime.now().isoformat(), trip_id))
+            """, (now, trip_id))
 
         await conn.commit()
 
     # Логируем событие
+    description = comment if comment else f"Статус изменен на: {new_status}"
     await log_trip_event(
         trip_id=trip_id,
         event_type="status_changed",
-        description=f"Статус изменен на: {new_status}",
+        description=description,
         created_by=updated_by
     )
 
@@ -449,3 +470,44 @@ async def get_all_trips(
         async with conn.execute(query, params) as cursor:
             rows = await cursor.fetchall()
             return [dict(row) for row in rows]
+
+
+async def complete_trip_with_tracking(
+    trip_id: int,
+    sdek_tracking: str,
+    completed_by: int
+) -> None:
+    """
+    Завершить рейс с указанием трек-номера СДЭК.
+
+    Args:
+        trip_id: ID рейса
+        sdek_tracking: Трек-номер СДЭК для оригиналов документов
+        completed_by: Кто завершил рейс (user_id)
+    """
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await _ensure_schema(conn)
+
+        now = datetime.now().isoformat()
+
+        # Обновляем статус, трек-номер и время завершения
+        await conn.execute("""
+            UPDATE trips
+            SET status = 'completed',
+                sdek_tracking = ?,
+                completed_at = ?
+            WHERE trip_id = ?
+        """, (sdek_tracking, now, trip_id))
+
+        await conn.commit()
+
+    # Логируем событие
+    await log_trip_event(
+        trip_id=trip_id,
+        event_type="completed",
+        description=f"Рейс завершен. СДЭК трек-номер: {sdek_tracking}",
+        created_by=completed_by,
+        metadata=f'{{"sdek_tracking": "{sdek_tracking}"}}'
+    )
+
+    logger.info(f"Trip {trip_id} completed with SDEK tracking: {sdek_tracking}")

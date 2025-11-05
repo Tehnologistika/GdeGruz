@@ -569,7 +569,9 @@ async def view_trip_callback(callback: CallbackQuery):
             'loading': '📦 Погрузка',
             'in_transit': '🚚 В пути',
             'unloading': '📥 Выгрузка',
-            'completed': '✅ Завершен'
+            'delivered': '📦 Доставлен',
+            'completed': '✅ Завершен',
+            'cancelled': '❌ Отменён'
         }
         status_text = status_map.get(trip['status'], trip['status'])
 
@@ -578,12 +580,17 @@ async def view_trip_callback(callback: CallbackQuery):
         kb.button(text="✏️ Редактировать", callback_data=f"edit_trip:{trip_id}")
         kb.button(text="📍 Запросить место", callback_data=f"request_location:{trip_id}")
 
+        # Кнопка "Груз доставлен" для рейсов в пути
+        if trip['status'] in ['in_transit', 'active']:
+            kb.button(text="📦 Груз доставлен", callback_data=f"mark_delivered:{trip_id}")
+
+        # Кнопка "Завершить" для всех незавершенных рейсов
         if trip['status'] not in ['completed', 'cancelled']:
             kb.button(text="✅ Завершить", callback_data=f"complete_trip:{trip_id}")
 
         kb.button(text="📋 История", callback_data=f"trip_history:{trip_id}")
         kb.button(text="◀️ Назад", callback_data="list_trips")
-        kb.adjust(2, 1, 2)
+        kb.adjust(2, 1, 1, 2)
 
         await callback.message.edit_text(
             f"🚚 **Рейс #{trip['trip_number']}**\n"
@@ -821,6 +828,131 @@ async def confirm_complete_callback(callback: CallbackQuery):
 
     except Exception as e:
         logger.error(f"Failed to complete trip: {e}", exc_info=True)
+        await callback.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
+
+
+@router.callback_query(F.data.startswith("mark_delivered:"))
+async def mark_delivered_callback(callback: CallbackQuery):
+    """Отметить груз доставленным."""
+    if not is_curator(callback.from_user.id):
+        await callback.answer("❌ Недостаточно прав", show_alert=True)
+        return
+
+    trip_id = int(callback.data.split(":")[1])
+
+    try:
+        trip = await db_trips.get_trip(trip_id)
+        if not trip:
+            await callback.answer("❌ Рейс не найден", show_alert=True)
+            return
+
+        # Проверяем текущий статус
+        if trip['status'] not in ['in_transit', 'active']:
+            await callback.answer(
+                f"❌ Рейс должен быть в статусе 'В пути' или 'Активен'",
+                show_alert=True
+            )
+            return
+
+        # ПРОВЕРЯЕМ документы выгрузки
+        import db_documents
+        check = await db_documents.check_unloading_documents(trip_id)
+
+        if not check['has_unloading_photo'] or not check['has_invoice']:
+            # Показываем предупреждение
+            kb = InlineKeyboardBuilder()
+            kb.button(text="⚠️ Да, отметить", callback_data=f"force_delivered:{trip_id}")
+            kb.button(text="❌ Отмена", callback_data=f"view_trip:{trip_id}")
+            kb.adjust(1, 1)
+
+            await callback.message.edit_text(
+                f"⚠️ **Внимание!**\n\n"
+                f"**Документы выгрузки:**\n"
+                f"{'✅' if check['has_unloading_photo'] else '❌'} Фото выгрузки: {check['unloading_photo_count']} шт\n"
+                f"{'✅' if check['has_invoice'] else '❌'} Накладные: {check['invoice_count']} шт\n\n"
+                f"Не все документы загружены.\n"
+                f"Всё равно отметить доставленным?",
+                reply_markup=kb.as_markup(),
+                parse_mode="Markdown"
+            )
+            await callback.answer()
+            return
+
+        # Документы OK - переводим
+        await confirm_delivered(callback, trip_id)
+
+    except Exception as e:
+        logger.error(f"Failed to mark delivered: {e}", exc_info=True)
+        await callback.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
+
+
+@router.callback_query(F.data.startswith("force_delivered:"))
+async def force_delivered_callback(callback: CallbackQuery):
+    """Принудительно отметить доставленным (без всех документов)."""
+    if not is_curator(callback.from_user.id):
+        await callback.answer("❌ Недостаточно прав", show_alert=True)
+        return
+
+    trip_id = int(callback.data.split(":")[1])
+    await confirm_delivered(callback, trip_id)
+
+
+async def confirm_delivered(callback: CallbackQuery, trip_id: int):
+    """Подтверждение отметки доставленным."""
+    try:
+        trip = await db_trips.get_trip(trip_id)
+        if not trip:
+            await callback.answer("❌ Рейс не найден", show_alert=True)
+            return
+
+        # Обновляем статус на 'delivered'
+        await db_trips.update_trip_status(
+            trip_id,
+            'delivered',
+            callback.from_user.id,
+            comment="Груз доставлен, ожидаем оригиналы документов"
+        )
+
+        # Уведомляем куратора
+        await callback.message.edit_text(
+            f"✅ **Рейс #{trip['trip_number']} отмечен доставленным!**\n\n"
+            f"Груз выгружен.\n"
+            f"Ожидаем отправку оригиналов документов через СДЭК.",
+            parse_mode="Markdown"
+        )
+
+        # Уведомляем водителя
+        if trip['user_id'] and trip['user_id'] > 0:
+            try:
+                await callback.bot.send_message(
+                    trip['user_id'],
+                    f"📦 **Рейс #{trip['trip_number']}**\n\n"
+                    f"✅ Груз доставлен!\n\n"
+                    f"Пожалуйста, отправьте оригиналы документов через СДЭК.\n"
+                    f"После отправки сообщите куратору трек-номер.",
+                    parse_mode="Markdown"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to notify driver: {e}")
+
+        # Уведомляем группу
+        if GROUP_CHAT_ID:
+            try:
+                await callback.bot.send_message(
+                    GROUP_CHAT_ID,
+                    f"📦 **ГРУЗ ДОСТАВЛЕН**\n\n"
+                    f"🚚 Рейс #{trip['trip_number']}\n"
+                    f"📞 {trip['phone']}\n\n"
+                    f"Груз выгружен. Ожидаем оригиналы.",
+                    parse_mode="Markdown"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to notify group: {e}")
+
+        await callback.answer("✅ Отмечено доставленным!")
+
+    except Exception as e:
+        logger.error(f"Failed to confirm delivery: {e}", exc_info=True)
         await callback.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
 
 
