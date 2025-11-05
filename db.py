@@ -41,23 +41,41 @@ async def _ensure_schema(db: aiosqlite.Connection) -> None:
 
 
 async def _ensure_driver_schema(db: aiosqlite.Connection) -> None:
-    """Create drivers table and `active` column if they do not exist."""
+    """Create drivers table and add missing columns if they do not exist."""
     # base table
     await db.execute(
         """
         CREATE TABLE IF NOT EXISTS drivers (
             user_id INTEGER PRIMARY KEY,
-            phone   TEXT,
-            active  INTEGER NOT NULL DEFAULT 1   -- 1 = tracking on
+            phone TEXT,
+            name TEXT,
+            registered_at TEXT,
+            active INTEGER NOT NULL DEFAULT 1
         )
         """
     )
-    # add column to old installations (SQLite allows IF NOT EXISTS only from 3.35)
-    try:
-        await db.execute("ALTER TABLE drivers ADD COLUMN active INTEGER NOT NULL DEFAULT 1")
-    except aiosqlite.OperationalError:
-        # column already exists
-        pass
+
+    # Add columns for old installations (SQLite doesn't support IF NOT EXISTS for ALTER TABLE)
+    columns_to_add = [
+        ("active", "INTEGER NOT NULL DEFAULT 1"),
+        ("name", "TEXT"),
+        ("registered_at", "TEXT"),
+    ]
+
+    for col_name, col_type in columns_to_add:
+        try:
+            await db.execute(f"ALTER TABLE drivers ADD COLUMN {col_name} {col_type}")
+        except aiosqlite.OperationalError:
+            # column already exists
+            pass
+
+    # Create index on phone for faster lookups
+    await db.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_drivers_phone ON drivers(phone)
+        """
+    )
+
     await db.commit()
 
 
@@ -102,20 +120,50 @@ async def get_last_point(user_id: int):
         }
 
 
-async def save_phone(user_id: int, phone: str) -> None:
-    """Persist a phone number in SQLite."""
+async def save_phone(user_id: int, phone: str, name: str = None) -> None:
+    """
+    Persist a phone number and name in SQLite.
+
+    Args:
+        user_id: Telegram user ID
+        phone: Phone number
+        name: Driver name (optional, can be set later)
+    """
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     async with aiosqlite.connect(DB_PATH) as db:
         await _ensure_driver_schema(db)
-        await db.execute(
-            """
-            INSERT INTO drivers(user_id, phone, active) VALUES(?, ?, 1)
-            ON CONFLICT(user_id) DO UPDATE SET phone=excluded.phone, active=1
-            """,
-            (user_id, phone),
-        )
+
+        # Check if driver already exists
+        async with db.execute(
+            "SELECT user_id, name, registered_at FROM drivers WHERE user_id = ?",
+            (user_id,)
+        ) as cursor:
+            existing = await cursor.fetchone()
+
+        if existing:
+            # Update existing driver (preserve name and registered_at if they exist)
+            await db.execute(
+                """
+                UPDATE drivers
+                SET phone = ?,
+                    name = COALESCE(?, name),
+                    active = 1
+                WHERE user_id = ?
+                """,
+                (phone, name, user_id),
+            )
+        else:
+            # New driver - set registered_at
+            await db.execute(
+                """
+                INSERT INTO drivers(user_id, phone, name, registered_at, active)
+                VALUES(?, ?, ?, ?, 1)
+                """,
+                (user_id, phone, name, datetime.now().isoformat()),
+            )
+
         await db.commit()
-    logger.info("Saved phone for %s", user_id)
+    logger.info("Saved phone for %s (name: %s)", user_id, name or "not set")
 
 
 async def get_phone(user_id: int) -> str | None:
@@ -149,6 +197,82 @@ async def get_user_id_by_phone(phone: str) -> Optional[int]:
         """, (phone,)) as cursor:
             row = await cursor.fetchone()
             return row[0] if row else None
+
+
+async def get_driver_by_user_id(user_id: int) -> Optional[dict]:
+    """
+    Получить информацию о водителе по Telegram user_id.
+
+    Args:
+        user_id: Telegram user ID
+
+    Returns:
+        dict | None: Данные водителя или None
+    """
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    async with aiosqlite.connect(DB_PATH) as db:
+        await _ensure_driver_schema(db)
+        db.row_factory = aiosqlite.Row
+        async with db.execute("""
+            SELECT user_id, phone, name, registered_at, active
+            FROM drivers WHERE user_id = ?
+        """, (user_id,)) as cursor:
+            row = await cursor.fetchone()
+            return dict(row) if row else None
+
+
+async def get_driver_by_phone(phone: str) -> Optional[dict]:
+    """
+    Получить информацию о водителе по номеру телефона.
+
+    Args:
+        phone: Номер телефона
+
+    Returns:
+        dict | None: Данные водителя или None
+    """
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    async with aiosqlite.connect(DB_PATH) as db:
+        await _ensure_driver_schema(db)
+        db.row_factory = aiosqlite.Row
+        async with db.execute("""
+            SELECT user_id, phone, name, registered_at, active
+            FROM drivers WHERE phone = ?
+        """, (phone,)) as cursor:
+            row = await cursor.fetchone()
+            return dict(row) if row else None
+
+
+async def save_driver_name(user_id: int, name: str) -> None:
+    """
+    Сохранить/обновить имя водителя.
+
+    Args:
+        user_id: Telegram user ID
+        name: Имя водителя
+    """
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    async with aiosqlite.connect(DB_PATH) as db:
+        await _ensure_driver_schema(db)
+        await db.execute("""
+            UPDATE drivers SET name = ? WHERE user_id = ?
+        """, (name, user_id))
+        await db.commit()
+    logger.info("Saved name '%s' for user %s", name, user_id)
+
+
+async def is_driver_registered(user_id: int) -> bool:
+    """
+    Проверить, зарегистрирован ли водитель (есть ли имя).
+
+    Args:
+        user_id: Telegram user ID
+
+    Returns:
+        bool: True если зарегистрирован (имеет имя)
+    """
+    driver = await get_driver_by_user_id(user_id)
+    return driver is not None and driver.get('name') is not None
 
 
 
