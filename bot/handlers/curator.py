@@ -15,6 +15,7 @@ from aiogram.filters import Command
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.exceptions import TelegramBadRequest
 
 import db_trips
 from db import get_user_id_by_phone
@@ -1346,20 +1347,31 @@ async def back_to_admin_callback(callback: CallbackQuery):
         kb.adjust(1, 2, 2, 1)
 
         # Используем edit_text вместо answer, т.к. это inline callback
-        await callback.message.edit_text(
-            "🎛 <b>Панель управления рейсами</b>\n\n"
-            f"📊 Статистика:\n"
-            f"• ⏳ Назначено: {stats['assigned']}\n"
-            f"• 🟢 Активно: {stats['active']}\n"
-            f"• 🚚 В пути: {stats['in_transit']}\n"
-            f"• 📦 Доставлено: {stats['delivered']}\n"
-            f"• ✅ Завершено: {stats['completed']}\n"
-            f"• ❌ Отменено: {stats['cancelled']}\n"
-            f"• 📌 Всего: {stats['total']}\n\n"
-            f"Выберите действие:",
-            reply_markup=kb.as_markup(),
-            parse_mode="HTML"
-        )
+        try:
+            await callback.message.edit_text(
+                "🎛 <b>Панель управления рейсами</b>\n\n"
+                f"📊 Статистика:\n"
+                f"• ⏳ Назначено: {stats['assigned']}\n"
+                f"• 🟢 Активно: {stats['active']}\n"
+                f"• 🚚 В пути: {stats['in_transit']}\n"
+                f"• 📦 Доставлено: {stats['delivered']}\n"
+                f"• ✅ Завершено: {stats['completed']}\n"
+                f"• ❌ Отменено: {stats['cancelled']}\n"
+                f"• 📌 Всего: {stats['total']}\n\n"
+                f"Выберите действие:",
+                reply_markup=kb.as_markup(),
+                parse_mode="HTML"
+            )
+        except TelegramBadRequest as e:
+            if "message is not modified" in str(e):
+                # Сообщение не изменилось, это нормально - просто отвечаем на callback
+                pass
+            else:
+                # Другая ошибка - логируем и показываем пользователю
+                logger.error(f"Failed to edit message in admin panel: {e}", exc_info=True)
+                await callback.answer("❌ Ошибка обновления панели", show_alert=True)
+                return
+
         await callback.answer()
 
     except Exception as e:
@@ -1378,9 +1390,9 @@ async def new_trip_callback(callback: CallbackQuery):
 
 @router.callback_query(F.data == "show_stats")
 async def show_stats_callback(callback: CallbackQuery):
-    """Показать статистику (просто возвращаемся в админ-панель)."""
-    # Статистика уже отображается в админ-панели, просто вызываем back_to_admin
-    await back_to_admin_callback(callback)
+    """Показать статистику."""
+    # Статистика уже отображается в админ-панели
+    await callback.answer("📊 Статистика отображается на панели управления", show_alert=False)
 
 
 @router.callback_query(F.data.startswith("trip_history:"))
