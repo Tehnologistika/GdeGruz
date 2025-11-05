@@ -67,14 +67,15 @@ async def save_contact(msg: Message) -> None:
         # Уведомляем кураторов о новом водителе
         if GROUP_CHAT_ID:
             try:
-                from datetime import datetime
+                from datetime import datetime, timezone, timedelta
+                moscow_tz = timezone(timedelta(hours=3))
                 await msg.bot.send_message(
                     GROUP_CHAT_ID,
                     f"🆕 **Новый водитель зарегистрировался**\n\n"
                     f"📞 {phone}\n"
                     f"🆔 User ID: {user_id}\n"
                     f"👤 {msg.from_user.full_name}\n"
-                    f"🕐 {datetime.now().strftime('%d.%m.%Y %H:%M')}",
+                    f"🕐 {datetime.now(moscow_tz).strftime('%d.%m.%Y %H:%M')}",
                     parse_mode="Markdown"
                 )
             except Exception as e:

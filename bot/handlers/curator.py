@@ -7,7 +7,7 @@
 import os
 import logging
 from typing import List
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
@@ -783,8 +783,8 @@ async def confirm_complete_callback(callback: CallbackQuery):
         if GROUP_CHAT_ID:
             try:
                 # Формируем полную карточку рейса
-                from datetime import datetime
-                completed_time = datetime.now().strftime('%d.%m.%Y %H:%M')
+                moscow_tz = timezone(timedelta(hours=3))
+                completed_time = datetime.now(moscow_tz).strftime('%d.%m.%Y %H:%M')
 
                 # Получаем имя куратора
                 curator_name = callback.from_user.full_name if callback.from_user else "Неизвестно"
