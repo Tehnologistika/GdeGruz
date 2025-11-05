@@ -1036,12 +1036,12 @@ async def trip_history_callback(callback: CallbackQuery):
 # ============================================================================
 
 @router.message(F.text == "➕ Создать рейс")
-async def text_create_trip(message: Message):
+async def text_create_trip(message: Message, state: FSMContext):
     """Обработчик текстовой кнопки 'Создать рейс'."""
     if not is_curator(message.from_user.id):
         return
     # Перенаправляем на команду /create_trip
-    await create_trip_command(message)
+    await start_create_trip(message, state)
 
 
 @router.message(F.text == "📋 Активные рейсы")
