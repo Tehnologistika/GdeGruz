@@ -10,6 +10,31 @@ logger = logging.getLogger(__name__)
 DB_PATH = Path("/home/git/fleet-live-bot/userdata/points.db")
 
 
+def normalize_phone(phone: str) -> str:
+    """
+    Нормализует номер телефона к формату +79991234567.
+
+    Принимает: +79991234567, 79991234567, 89991234567, 9991234567
+    Возвращает: +79991234567
+    """
+    # Убираем все кроме цифр и +
+    cleaned = ''.join(c for c in phone if c.isdigit() or c == '+')
+
+    # Если начинается с 8, заменяем на 7
+    if cleaned.startswith('8') and len(cleaned) == 11:
+        cleaned = '7' + cleaned[1:]
+
+    # Если начинается с 9 (без кода страны)
+    if cleaned.startswith('9') and len(cleaned) == 10:
+        cleaned = '7' + cleaned
+
+    # Добавляем + если его нет
+    if not cleaned.startswith('+'):
+        cleaned = '+' + cleaned
+
+    return cleaned
+
+
 async def init() -> None:
     """Initialize database and create missing tables."""
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -129,6 +154,9 @@ async def save_phone(user_id: int, phone: str, name: str = None) -> None:
         phone: Phone number
         name: Driver name (optional, can be set later)
     """
+    # Нормализуем телефон
+    phone = normalize_phone(phone)
+
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     async with aiosqlite.connect(DB_PATH) as db:
         await _ensure_driver_schema(db)
@@ -231,6 +259,9 @@ async def get_driver_by_phone(phone: str) -> Optional[dict]:
     Returns:
         dict | None: Данные водителя или None
     """
+    # Нормализуем телефон
+    phone = normalize_phone(phone)
+
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     async with aiosqlite.connect(DB_PATH) as db:
         await _ensure_driver_schema(db)

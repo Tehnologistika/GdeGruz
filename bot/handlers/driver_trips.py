@@ -28,8 +28,10 @@ async def activate_my_trip(callback: CallbackQuery):
             await callback.answer("❌ Рейс не найден", show_alert=True)
             return
 
-        # Проверяем, что это рейс этого водителя
-        if trip['user_id'] != user_id:
+        # Проверяем, что это рейс этого водителя (по телефону)
+        from db import get_phone
+        driver_phone = await get_phone(user_id)
+        if not driver_phone or trip['phone'] != driver_phone:
             await callback.answer("❌ Это не ваш рейс", show_alert=True)
             return
 
@@ -83,12 +85,28 @@ async def view_my_trip(event):
             trip_id = int(callback.data.split(":")[1])
             trip = await db_trips.get_trip(trip_id)
         else:
-            trips = await db_trips.get_user_active_trips(user_id)
+            # Получаем телефон водителя и ищем рейсы по телефону
+            from db import get_phone
+            phone = await get_phone(user_id)
+            if phone:
+                all_trips = await db_trips.get_trips_by_phone(phone)
+                # Фильтруем только активные (не завершенные и не отмененные)
+                trips = [t for t in all_trips if t.get('status') not in ['completed', 'cancelled']]
+            else:
+                trips = []
             trip = trips[0] if trips else None
     else:
         message = event
         user_id = message.from_user.id
-        trips = await db_trips.get_user_active_trips(user_id)
+        # Получаем телефон водителя и ищем рейсы по телефону
+        from db import get_phone
+        phone = await get_phone(user_id)
+        if phone:
+            all_trips = await db_trips.get_trips_by_phone(phone)
+            # Фильтруем только активные (не завершенные и не отмененные)
+            trips = [t for t in all_trips if t.get('status') not in ['completed', 'cancelled']]
+        else:
+            trips = []
         trip = trips[0] if trips else None
 
     if not trip:
@@ -101,8 +119,10 @@ async def view_my_trip(event):
             await event.answer(text)
         return
 
-    # Проверяем права
-    if trip['user_id'] != user_id:
+    # Проверяем права (по телефону)
+    from db import get_phone
+    driver_phone = await get_phone(user_id)
+    if not driver_phone or trip['phone'] != driver_phone:
         if isinstance(event, CallbackQuery):
             await event.answer("❌ Это не ваш рейс", show_alert=True)
         return
@@ -153,8 +173,15 @@ async def change_status_menu(callback: CallbackQuery):
 
     try:
         trip = await db_trips.get_trip(trip_id)
-        if not trip or trip['user_id'] != user_id:
-            await callback.answer("❌ Ошибка", show_alert=True)
+        if not trip:
+            await callback.answer("❌ Рейс не найден", show_alert=True)
+            return
+
+        # Проверяем права (по телефону)
+        from db import get_phone
+        driver_phone = await get_phone(user_id)
+        if not driver_phone or trip['phone'] != driver_phone:
+            await callback.answer("❌ Это не ваш рейс", show_alert=True)
             return
 
         # Формируем доступные статусы
@@ -208,8 +235,15 @@ async def set_status(callback: CallbackQuery):
 
     try:
         trip = await db_trips.get_trip(trip_id)
-        if not trip or trip['user_id'] != user_id:
-            await callback.answer("❌ Ошибка", show_alert=True)
+        if not trip:
+            await callback.answer("❌ Рейс не найден", show_alert=True)
+            return
+
+        # Проверяем права (по телефону)
+        from db import get_phone
+        driver_phone = await get_phone(user_id)
+        if not driver_phone or trip['phone'] != driver_phone:
+            await callback.answer("❌ Это не ваш рейс", show_alert=True)
             return
 
         # Если завершение - показываем подтверждение
@@ -249,8 +283,15 @@ async def confirm_status(callback: CallbackQuery):
 
     try:
         trip = await db_trips.get_trip(trip_id)
-        if not trip or trip['user_id'] != user_id:
-            await callback.answer("❌ Ошибка", show_alert=True)
+        if not trip:
+            await callback.answer("❌ Рейс не найден", show_alert=True)
+            return
+
+        # Проверяем права (по телефону)
+        from db import get_phone
+        driver_phone = await get_phone(user_id)
+        if not driver_phone or trip['phone'] != driver_phone:
+            await callback.answer("❌ Это не ваш рейс", show_alert=True)
             return
 
         # Обновляем статус
@@ -291,8 +332,15 @@ async def trip_details(callback: CallbackQuery):
 
     try:
         trip = await db_trips.get_trip(trip_id)
-        if not trip or trip['user_id'] != user_id:
-            await callback.answer("❌ Ошибка", show_alert=True)
+        if not trip:
+            await callback.answer("❌ Рейс не найден", show_alert=True)
+            return
+
+        # Проверяем права (по телефону)
+        from db import get_phone
+        driver_phone = await get_phone(user_id)
+        if not driver_phone or trip['phone'] != driver_phone:
+            await callback.answer("❌ Это не ваш рейс", show_alert=True)
             return
 
         # Получаем события

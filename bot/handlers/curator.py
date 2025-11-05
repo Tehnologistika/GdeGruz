@@ -252,6 +252,10 @@ async def process_trip_data(message: Message, state: FSMContext):
     unloading_date = lines[4]
     rate = lines[5]
 
+    # Нормализуем телефон
+    from db import normalize_phone
+    phone = normalize_phone(phone)
+
     # Валидация телефона
     if not phone.startswith("+7") or len(phone) != 12:
         await message.answer(
@@ -357,6 +361,39 @@ async def process_trip_data(message: Message, state: FSMContext):
                 )
             except Exception as e:
                 logger.warning(f"Failed to send notification to group: {e}")
+
+        # Если водитель зарегистрирован - отправляем ему уведомление о новом рейсе
+        if user_id and user_id > 0:
+            try:
+                from db import get_driver_by_user_id
+
+                # Получаем информацию о водителе
+                driver = await get_driver_by_user_id(user_id)
+                driver_name = driver.get('name', 'Водитель') if driver else 'Водитель'
+
+                # Формируем кнопки для водителя
+                driver_kb = InlineKeyboardBuilder()
+                driver_kb.button(text="✅ Активировать рейс", callback_data=f"activate_my_trip:{trip_id}")
+                driver_kb.button(text="ℹ️ Подробнее", callback_data=f"view_my_trip:{trip_id}")
+                driver_kb.adjust(1, 1)
+
+                await message.bot.send_message(
+                    user_id,
+                    f"🚚 <b>Вам назначен новый рейс!</b>\n\n"
+                    f"Здравствуйте, {driver_name}!\n\n"
+                    f"Рейс <b>#{trip_number}</b>\n"
+                    f"📍 Погрузка: {loading_address}\n"
+                    f"📅 {loading_date}\n\n"
+                    f"📍 Выгрузка: {unloading_address}\n"
+                    f"📅 {unloading_date}\n\n"
+                    f"💰 Ставка: {rate_float:,.0f} ₽\n\n"
+                    f"Для начала работы активируйте рейс, нажав кнопку ниже.",
+                    reply_markup=driver_kb.as_markup(),
+                    parse_mode="HTML"
+                )
+                logger.info(f"Sent trip notification to driver {user_id} (trip #{trip_number})")
+            except Exception as e:
+                logger.warning(f"Failed to send notification to driver {user_id}: {e}")
 
     except Exception as e:
         logger.error(f"Failed to create trip: {e}", exc_info=True)

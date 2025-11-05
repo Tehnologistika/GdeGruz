@@ -16,6 +16,9 @@ import aiosqlite
 
 logger = logging.getLogger(__name__)
 
+# Import phone normalization function
+from db import normalize_phone
+
 DB_PATH = Path("/home/git/fleet-live-bot/userdata/trips.db")
 
 
@@ -144,6 +147,9 @@ async def create_trip_by_curator(
     Returns:
         tuple[int, str]: (trip_id, trip_number)
     """
+    # Нормализуем телефон
+    phone = normalize_phone(phone)
+
     # Генерируем уникальный номер рейса
     trip_number = await _generate_trip_number()
 
@@ -198,6 +204,9 @@ async def get_trips_by_phone(phone: str, status: Optional[str] = None) -> List[D
     Returns:
         List[Dict]: Список рейсов
     """
+    # Нормализуем телефон
+    phone = normalize_phone(phone)
+
     async with aiosqlite.connect(DB_PATH) as conn:
         await _ensure_schema(conn)
         conn.row_factory = aiosqlite.Row
@@ -458,6 +467,9 @@ async def get_all_trips(
 
 async def update_trip_phone(trip_id: int, phone: str) -> None:
     """Обновить номер телефона рейса."""
+    # Нормализуем телефон
+    phone = normalize_phone(phone)
+
     async with aiosqlite.connect(DB_PATH) as conn:
         await conn.execute(
             "UPDATE trips SET phone = ? WHERE trip_id = ?",
