@@ -11,7 +11,8 @@ from db import get_phone
 
 GROUP_CHAT_ID_STR = os.getenv("GROUP_CHAT_ID")
 GROUP_CHAT_ID = int(GROUP_CHAT_ID_STR) if GROUP_CHAT_ID_STR else None
-from ..keyboards import location_kb
+from ..keyboards import location_kb, curator_kb
+from ..utils import is_curator
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +33,18 @@ async def save_contact(msg: Message) -> None:
     # Сохраняем телефон
     await save_phone(user_id, phone)
 
-    # Проверяем, есть ли назначенные рейсы
+    # Проверяем роль пользователя
+    if is_curator(user_id):
+        # Куратор - даём админ-панель
+        await msg.answer(
+            f"✅ Номер {phone} сохранён.\n\n"
+            f"🎛 Вы - куратор рейсов.\n"
+            f"Используйте кнопки ниже для управления.",
+            reply_markup=curator_kb()
+        )
+        return
+
+    # Водитель - проверяем, есть ли назначенные рейсы
     import db_trips
     assigned_trips = await db_trips.get_trips_by_phone(phone, status='assigned')
 

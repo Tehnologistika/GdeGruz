@@ -114,6 +114,68 @@ async def admin_panel(message: Message):
         )
 
 
+# ========== Обработчики кнопок куратора ==========
+
+
+@router.message(F.text == "🎛 Панель управления")
+async def panel_button(message: Message):
+    """
+    Обработчик кнопки 'Панель управления'.
+
+    Вызывает admin_panel для показа панели управления.
+    """
+    if not is_curator(message.from_user.id):
+        await message.answer("❌ Эта кнопка доступна только кураторам")
+        return
+
+    await admin_panel(message)
+
+
+@router.message(F.text == "➕ Создать рейс")
+async def create_trip_button(message: Message, state: FSMContext):
+    """
+    Обработчик кнопки 'Создать рейс'.
+
+    Вызывает start_create_trip для начала создания рейса.
+    """
+    if not is_curator(message.from_user.id):
+        await message.answer("❌ Эта кнопка доступна только кураторам")
+        return
+
+    await start_create_trip(message, state)
+
+
+@router.message(F.text == "📋 Список рейсов")
+async def trips_list_button(message: Message):
+    """
+    Обработчик кнопки 'Список рейсов'.
+
+    Вызывает list_trips_command для показа списка рейсов.
+    """
+    if not is_curator(message.from_user.id):
+        await message.answer("❌ Эта кнопка доступна только кураторам")
+        return
+
+    await list_trips_command(message)
+
+
+@router.message(F.text == "📊 Статистика")
+async def statistics_button(message: Message):
+    """
+    Обработчик кнопки 'Статистика'.
+
+    Показывает панель управления со статистикой.
+    """
+    if not is_curator(message.from_user.id):
+        await message.answer("❌ Эта кнопка доступна только кураторам")
+        return
+
+    await admin_panel(message)
+
+
+# ========== Обработчики команд ==========
+
+
 @router.message(Command("trips"))
 async def list_trips_command(message: Message):
     """

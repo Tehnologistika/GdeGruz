@@ -31,6 +31,21 @@ def location_kb() -> ReplyKeyboardMarkup:
     return kb.as_markup(resize_keyboard=True)
 
 
+def curator_kb() -> ReplyKeyboardMarkup:
+    """
+    Клавиатура для куратора рейсов.
+
+    Содержит кнопки управления рейсами вместо команд.
+    """
+    kb = ReplyKeyboardBuilder()
+    kb.button(text="🎛 Панель управления")
+    kb.button(text="➕ Создать рейс")
+    kb.button(text="📋 Список рейсов")
+    kb.button(text="📊 Статистика")
+    kb.adjust(2, 2)
+    return kb.as_markup(resize_keyboard=True)
+
+
 def resume_kb() -> ReplyKeyboardMarkup:
     """Клавиатура для возобновления отслеживания."""
     kb = ReplyKeyboardBuilder()
