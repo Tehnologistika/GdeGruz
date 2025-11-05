@@ -93,7 +93,7 @@ async def admin_panel(message: Message):
         kb.adjust(1, 2, 2, 1)
 
         await message.answer(
-            "🎛 **Панель управления рейсами**\n\n"
+            "🎛 <b>Панель управления рейсами</b>\n\n"
             f"📊 Статистика:\n"
             f"• ⏳ Назначено: {stats['assigned']}\n"
             f"• 🟢 Активно: {stats['active']}\n"
@@ -104,7 +104,7 @@ async def admin_panel(message: Message):
             f"• 📌 Всего: {stats['total']}\n\n"
             f"Выберите действие:",
             reply_markup=kb.as_markup(),
-            parse_mode="Markdown"
+            parse_mode="HTML"
         )
     except Exception as e:
         logger.error(f"Failed to show admin panel: {e}", exc_info=True)
@@ -197,16 +197,16 @@ async def list_trips_command(message: Message):
             kb.button(text="➕ Создать рейс", callback_data="new_trip")
 
             await message.answer(
-                "📋 **Активные рейсы**\n\n"
+                "📋 <b>Активные рейсы</b>\n\n"
                 "Нет активных рейсов.\n\n"
                 "Используйте /create_trip для создания нового рейса.",
                 reply_markup=kb.as_markup(),
-                parse_mode="Markdown"
+                parse_mode="HTML"
             )
             return
 
         # Формируем список
-        text = "📋 **Активные рейсы:**\n\n"
+        text = "📋 <b>Активные рейсы:</b>\n\n"
 
         status_emoji = {
             'assigned': '⏳',
@@ -220,7 +220,7 @@ async def list_trips_command(message: Message):
         for trip in active_trips[:10]:
             emoji = status_emoji.get(trip['status'], '❓')
             text += (
-                f"{emoji} **{trip['trip_number']}** - {trip['phone']}\n"
+                f"{emoji} <b>{trip['trip_number']}</b> - {trip['phone']}\n"
                 f"   {trip['loading_address'][:30]}...\n"
                 f"   ↓\n"
                 f"   {trip['unloading_address'][:30]}...\n\n"
@@ -244,7 +244,7 @@ async def list_trips_command(message: Message):
         await message.answer(
             text,
             reply_markup=kb.as_markup(),
-            parse_mode="Markdown"
+            parse_mode="HTML"
         )
 
     except Exception as e:
@@ -266,7 +266,7 @@ async def start_create_trip(message: Message, state: FSMContext):
     await state.set_state(CreateTripStates.waiting_data)
 
     await message.answer(
-        "➕ **Создание рейса**\n\n"
+        "➕ <b>Создание рейса</b>\n\n"
         "Отправьте данные одним сообщением:\n\n"
         "```\n"
         "Телефон водителя\n"
@@ -276,7 +276,7 @@ async def start_create_trip(message: Message, state: FSMContext):
         "Дата выгрузки (ДД.ММ)\n"
         "Ставка\n"
         "```\n\n"
-        "**Пример:**\n"
+        "<b>Пример:</b>\n"
         "```\n"
         "+79991234567\n"
         "Москва, ул. Ленина 1\n"
@@ -285,7 +285,7 @@ async def start_create_trip(message: Message, state: FSMContext):
         "21.11\n"
         "50000\n"
         "```",
-        parse_mode="Markdown",
+        parse_mode="HTML",
         reply_markup=cancel_kb()
     )
 
@@ -400,8 +400,8 @@ async def process_trip_data(message: Message, state: FSMContext):
 
         # Отправляем куратору
         await message.answer(
-            f"✅ **Рейс создан!**\n\n"
-            f"🚚 Рейс **#{trip_number}**\n"
+            f"✅ <b>Рейс создан!</b>\n\n"
+            f"🚚 Рейс <b>#{trip_number}</b>\n"
             f"📞 Водитель: {phone}\n"
             f"📍 {loading_address}\n"
             f"     ↓\n"
@@ -411,7 +411,7 @@ async def process_trip_data(message: Message, state: FSMContext):
             f"Статус: {status_text}"
             f"{warning}",
             reply_markup=kb.as_markup(),
-            parse_mode="Markdown"
+            parse_mode="HTML"
         )
 
         # Уведомляем в группу кураторов
@@ -419,14 +419,14 @@ async def process_trip_data(message: Message, state: FSMContext):
             try:
                 await message.bot.send_message(
                     GROUP_CHAT_ID,
-                    f"🆕 **Создан новый рейс**\n\n"
+                    f"🆕 <b>Создан новый рейс</b>\n\n"
                     f"🚚 Рейс #{trip_number}\n"
                     f"📞 {phone}\n"
                     f"📍 {loading_address} → {unloading_address}\n"
                     f"📅 {loading_date} → {unloading_date}\n"
                     f"💰 {rate_float:,.0f} ₽\n\n"
                     f"Куратор: {message.from_user.full_name}",
-                    parse_mode="Markdown"
+                    parse_mode="HTML"
                 )
             except Exception as e:
                 logger.warning(f"Failed to send notification to group: {e}")
@@ -482,7 +482,7 @@ async def activate_trip_callback(callback: CallbackQuery):
         kb.adjust(2, 1)
 
         await callback.message.edit_text(
-            f"✅ **Рейс активирован!**\n\n"
+            f"✅ <b>Рейс активирован!</b>\n\n"
             f"🚚 Рейс #{trip['trip_number']}\n"
             f"📞 {trip['phone']}\n"
             f"📍 {trip['loading_address']} → {trip['unloading_address']}\n"
@@ -491,7 +491,7 @@ async def activate_trip_callback(callback: CallbackQuery):
             f"Статус: 🟢 Активен\n"
             f"Уведомление отправлено водителю.",
             reply_markup=kb.as_markup(),
-            parse_mode="Markdown"
+            parse_mode="HTML"
         )
 
         # Отправляем уведомление водителю
@@ -499,7 +499,7 @@ async def activate_trip_callback(callback: CallbackQuery):
             try:
                 await callback.bot.send_message(
                     trip['user_id'],
-                    f"🚚 **Ваш рейс активирован куратором!**\n\n"
+                    f"🚚 <b>Ваш рейс активирован куратором!</b>\n\n"
                     f"Рейс #{trip['trip_number']}\n"
                     f"📍 {trip['loading_address']}\n"
                     f"     ↓\n"
@@ -508,7 +508,7 @@ async def activate_trip_callback(callback: CallbackQuery):
                     f"📅 Выгрузка: {trip['unloading_date']}\n"
                     f"💰 Ставка: {trip['rate']:,.0f} ₽\n\n"
                     f"Не забывайте делиться местоположением!",
-                    parse_mode="Markdown"
+                    parse_mode="HTML"
                 )
             except Exception as e:
                 logger.warning(f"Failed to notify driver: {e}")
@@ -576,12 +576,12 @@ async def view_trip_callback(callback: CallbackQuery):
         progress_bar = ' → '.join(progress)
 
         status_descriptions = {
-            'assigned': '⏳ **Ожидает активации**\nВодитель ещё не поделился номером',
-            'active': '🟢 **Активен**\nВодитель готовится к погрузке',
-            'in_transit': '🚚 **В пути**\nГруз погружен, едет на выгрузку',
-            'delivered': '📦 **Доставлен**\nГруз выгружен, ожидаем оригиналы документов',
-            'completed': '✅ **Завершён**\nВсе документы получены, рейс закрыт',
-            'cancelled': '❌ **Отменён**'
+            'assigned': '⏳ <b>Ожидает активации</b>\nВодитель ещё не поделился номером',
+            'active': '🟢 <b>Активен</b>\nВодитель готовится к погрузке',
+            'in_transit': '🚚 <b>В пути</b>\nГруз погружен, едет на выгрузку',
+            'delivered': '📦 <b>Доставлен</b>\nГруз выгружен, ожидаем оригиналы документов',
+            'completed': '✅ <b>Завершён</b>\nВсе документы получены, рейс закрыт',
+            'cancelled': '❌ <b>Отменён</b>'
         }
         status_text = status_descriptions.get(trip['status'], trip['status'])
 
@@ -590,7 +590,7 @@ async def view_trip_callback(callback: CallbackQuery):
         docs_check = await db_documents.get_trip_documents_summary(trip_id)
 
         # Формируем текст о документах
-        docs_text = "\n\n📄 **Документы:**\n"
+        docs_text = "\n\n📄 <b>Документы:</b>\n"
 
         # Документы погрузки
         loading = docs_check['loading']
@@ -627,9 +627,9 @@ async def view_trip_callback(callback: CallbackQuery):
         kb.adjust(1, 2, 1, 1)
 
         await callback.message.edit_text(
-            f"🚚 **Рейс #{trip['trip_number']}**\n\n"
+            f"🚚 <b>Рейс #{trip['trip_number']}</b>\n\n"
             f"{status_text}\n\n"
-            f"**Прогресс:**\n{progress_bar}\n"
+            f"<b>Прогресс:</b>\n{progress_bar}\n"
             f"Назначен → Активен → В пути → Доставлен → Завершён\n\n"
             f"━━━━━━━━━━━━━━━━━━━━\n\n"
             f"📞 Водитель: {trip['phone']}\n"
@@ -642,7 +642,7 @@ async def view_trip_callback(callback: CallbackQuery):
             f"📍 Последняя локация: {loc_text}\n"
             f"🕐 Создан: {trip['created_at'][:10]}",
             reply_markup=kb.as_markup(),
-            parse_mode="Markdown"
+            parse_mode="HTML"
         )
 
         await callback.answer()
@@ -681,14 +681,14 @@ async def request_location_callback(callback: CallbackQuery):
         kb.adjust(1, 1)
 
         await callback.message.edit_text(
-            f"📍 **Запрос местоположения**\n\n"
+            f"📍 <b>Запрос местоположения</b>\n\n"
             f"Отправить водителю напоминание\n"
             f"о необходимости поделиться\n"
             f"местоположением?\n\n"
             f"📞 {trip['phone']}\n"
             f"🚚 Рейс #{trip['trip_number']}",
             reply_markup=kb.as_markup(),
-            parse_mode="Markdown"
+            parse_mode="HTML"
         )
 
         await callback.answer()
@@ -723,11 +723,11 @@ async def confirm_location_callback(callback: CallbackQuery):
 
         await callback.bot.send_message(
             trip['user_id'],
-            f"📍 **Напоминание от куратора**\n\n"
+            f"📍 <b>Напоминание от куратора</b>\n\n"
             f"Пожалуйста, поделитесь текущим местоположением.\n\n"
             f"🚚 Рейс #{trip['trip_number']}",
             reply_markup=kb.as_markup(resize_keyboard=True),
-            parse_mode="Markdown"
+            parse_mode="HTML"
         )
 
         # Логируем событие
@@ -769,12 +769,12 @@ async def complete_trip_callback(callback: CallbackQuery):
         kb.adjust(1, 1)
 
         await callback.message.edit_text(
-            f"⚠️ **Завершение рейса #{trip['trip_number']}**\n\n"
+            f"⚠️ <b>Завершение рейса #{trip['trip_number']}</b>\n\n"
             f"📞 Водитель: {trip['phone']}\n"
             f"📍 {trip['loading_address']} → {trip['unloading_address']}\n\n"
             f"Завершить рейс?",
             reply_markup=kb.as_markup(),
-            parse_mode="Markdown"
+            parse_mode="HTML"
         )
 
         await callback.answer()
@@ -804,10 +804,10 @@ async def confirm_complete_callback(callback: CallbackQuery):
 
         # Уведомляем куратора
         await callback.message.edit_text(
-            f"✅ **Рейс #{trip['trip_number']} завершен!**\n\n"
+            f"✅ <b>Рейс #{trip['trip_number']} завершен!</b>\n\n"
             f"Уведомление отправлено водителю.\n"
             f"Отслеживание остановлено.",
-            parse_mode="Markdown"
+            parse_mode="HTML"
         )
 
         # Уведомляем водителя
@@ -815,11 +815,11 @@ async def confirm_complete_callback(callback: CallbackQuery):
             try:
                 await callback.bot.send_message(
                     trip['user_id'],
-                    f"✅ **Рейс #{trip['trip_number']} завершен!**\n\n"
+                    f"✅ <b>Рейс #{trip['trip_number']} завершен!</b>\n\n"
                     f"Спасибо за работу! 🎉\n\n"
                     f"Отслеживание местоположения остановлено.\n"
                     f"При получении нового рейса вы получите уведомление.",
-                    parse_mode="Markdown"
+                    parse_mode="HTML"
                 )
             except Exception as e:
                 logger.warning(f"Failed to notify driver: {e}")
@@ -835,28 +835,28 @@ async def confirm_complete_callback(callback: CallbackQuery):
                 curator_name = callback.from_user.full_name if callback.from_user else "Неизвестно"
 
                 notification_text = (
-                    f"✅ **РЕЙС ЗАВЕРШЕН**\n\n"
-                    f"🚚 **Рейс #{trip['trip_number']}**\n"
+                    f"✅ <b>РЕЙС ЗАВЕРШЕН</b>\n\n"
+                    f"🚚 <b>Рейс #{trip['trip_number']}</b>\n"
                     f"━━━━━━━━━━━━━━━━━━━━\n\n"
-                    f"📞 **Водитель:** {trip['phone']}\n"
-                    f"🆔 **User ID:** {trip['user_id'] if trip['user_id'] else 'Не зарегистрирован'}\n\n"
-                    f"📍 **Маршрут:**\n"
+                    f"📞 <b>Водитель:</b> {trip['phone']}\n"
+                    f"🆔 <b>User ID:</b> {trip['user_id'] if trip['user_id'] else 'Не зарегистрирован'}\n\n"
+                    f"📍 <b>Маршрут:</b>\n"
                     f"   🔵 Погрузка: {trip['loading_address']}\n"
                     f"   📅 {trip['loading_date']}\n\n"
                     f"   🔴 Выгрузка: {trip['unloading_address']}\n"
                     f"   📅 {trip['unloading_date']}\n\n"
-                    f"💰 **Ставка:** {trip['rate']:,.0f} ₽\n\n"
+                    f"💰 <b>Ставка:</b> {trip['rate']:,.0f} ₽\n\n"
                     f"━━━━━━━━━━━━━━━━━━━━\n"
-                    f"👤 **Завершил:** {curator_name}\n"
-                    f"🕐 **Время завершения:** {completed_time}\n"
-                    f"📊 **Создан:** {trip['created_at'][:10]}\n\n"
+                    f"👤 <b>Завершил:</b> {curator_name}\n"
+                    f"🕐 <b>Время завершения:</b> {completed_time}\n"
+                    f"📊 <b>Создан:</b> {trip['created_at'][:10]}\n\n"
                     f"✅ Рейс успешно завершен! Отслеживание остановлено."
                 )
 
                 await callback.bot.send_message(
                     GROUP_CHAT_ID,
                     notification_text,
-                    parse_mode="Markdown"
+                    parse_mode="HTML"
                 )
                 logger.info(f"Sent completion notification to group {GROUP_CHAT_ID} for trip #{trip['trip_number']}")
             except Exception as e:
@@ -904,14 +904,14 @@ async def mark_delivered_callback(callback: CallbackQuery):
             kb.adjust(1, 1)
 
             await callback.message.edit_text(
-                f"⚠️ **Внимание!**\n\n"
-                f"**Документы выгрузки:**\n"
+                f"⚠️ <b>Внимание!</b>\n\n"
+                f"<b>Документы выгрузки:</b>\n"
                 f"{'✅' if check['has_unloading_photo'] else '❌'} Фото выгрузки: {check['unloading_photo_count']} шт\n"
                 f"{'✅' if check['has_invoice'] else '❌'} Накладные: {check['invoice_count']} шт\n\n"
                 f"Не все документы загружены.\n"
                 f"Всё равно отметить доставленным?",
                 reply_markup=kb.as_markup(),
-                parse_mode="Markdown"
+                parse_mode="HTML"
             )
             await callback.answer()
             return
@@ -953,10 +953,10 @@ async def confirm_delivered(callback: CallbackQuery, trip_id: int):
 
         # Уведомляем куратора
         await callback.message.edit_text(
-            f"✅ **Рейс #{trip['trip_number']} отмечен доставленным!**\n\n"
+            f"✅ <b>Рейс #{trip['trip_number']} отмечен доставленным!</b>\n\n"
             f"Груз выгружен.\n"
             f"Ожидаем отправку оригиналов документов через СДЭК.",
-            parse_mode="Markdown"
+            parse_mode="HTML"
         )
 
         # Уведомляем водителя
@@ -964,11 +964,11 @@ async def confirm_delivered(callback: CallbackQuery, trip_id: int):
             try:
                 await callback.bot.send_message(
                     trip['user_id'],
-                    f"📦 **Рейс #{trip['trip_number']}**\n\n"
+                    f"📦 <b>Рейс #{trip['trip_number']}</b>\n\n"
                     f"✅ Груз доставлен!\n\n"
                     f"Пожалуйста, отправьте оригиналы документов через СДЭК.\n"
                     f"После отправки сообщите куратору трек-номер.",
-                    parse_mode="Markdown"
+                    parse_mode="HTML"
                 )
             except Exception as e:
                 logger.warning(f"Failed to notify driver: {e}")
@@ -978,11 +978,11 @@ async def confirm_delivered(callback: CallbackQuery, trip_id: int):
             try:
                 await callback.bot.send_message(
                     GROUP_CHAT_ID,
-                    f"📦 **ГРУЗ ДОСТАВЛЕН**\n\n"
+                    f"📦 <b>ГРУЗ ДОСТАВЛЕН</b>\n\n"
                     f"🚚 Рейс #{trip['trip_number']}\n"
                     f"📞 {trip['phone']}\n\n"
                     f"Груз выгружен. Ожидаем оригиналы.",
-                    parse_mode="Markdown"
+                    parse_mode="HTML"
                 )
             except Exception as e:
                 logger.warning(f"Failed to notify group: {e}")
@@ -1016,12 +1016,12 @@ async def cancel_trip_callback(callback: CallbackQuery):
         kb.adjust(1, 1)
 
         await callback.message.edit_text(
-            f"⚠️ **Отмена рейса #{trip['trip_number']}**\n\n"
+            f"⚠️ <b>Отмена рейса #{trip['trip_number']}</b>\n\n"
             f"📞 Водитель: {trip['phone']}\n"
             f"📍 {trip['loading_address']} → {trip['unloading_address']}\n\n"
             f"Вы уверены, что хотите отменить рейс?",
             reply_markup=kb.as_markup(),
-            parse_mode="Markdown"
+            parse_mode="HTML"
         )
 
         await callback.answer()
@@ -1056,9 +1056,9 @@ async def confirm_cancel_callback(callback: CallbackQuery):
 
         # Уведомляем куратора
         await callback.message.edit_text(
-            f"❌ **Рейс #{trip['trip_number']} отменён**\n\n"
+            f"❌ <b>Рейс #{trip['trip_number']} отменён</b>\n\n"
             f"Рейс успешно отменён.",
-            parse_mode="Markdown"
+            parse_mode="HTML"
         )
 
         # Уведомляем водителя
@@ -1066,10 +1066,10 @@ async def confirm_cancel_callback(callback: CallbackQuery):
             try:
                 await callback.bot.send_message(
                     trip['user_id'],
-                    f"❌ **Рейс #{trip['trip_number']} отменён**\n\n"
+                    f"❌ <b>Рейс #{trip['trip_number']} отменён</b>\n\n"
                     f"К сожалению, рейс был отменён.\n"
                     f"За подробностями обратитесь к куратору.",
-                    parse_mode="Markdown"
+                    parse_mode="HTML"
                 )
             except Exception as e:
                 logger.warning(f"Failed to notify driver: {e}")
@@ -1079,11 +1079,11 @@ async def confirm_cancel_callback(callback: CallbackQuery):
             try:
                 await callback.bot.send_message(
                     GROUP_CHAT_ID,
-                    f"❌ **РЕЙС ОТМЕНЁН**\n\n"
+                    f"❌ <b>РЕЙС ОТМЕНЁН</b>\n\n"
                     f"🚚 Рейс #{trip['trip_number']}\n"
                     f"📞 {trip['phone']}\n"
                     f"👤 Отменил: {callback.from_user.full_name}",
-                    parse_mode="Markdown"
+                    parse_mode="HTML"
                 )
             except Exception as e:
                 logger.warning(f"Failed to notify group: {e}")
@@ -1112,17 +1112,17 @@ async def list_trips_callback(callback: CallbackQuery):
             kb.button(text="◀️ Назад", callback_data="back_to_admin")
 
             await callback.message.edit_text(
-                "📋 **Все рейсы**\n\n"
+                "📋 <b>Все рейсы</b>\n\n"
                 "Нет рейсов.\n\n"
                 "Используйте /create_trip для создания нового рейса.",
                 reply_markup=kb.as_markup(),
-                parse_mode="Markdown"
+                parse_mode="HTML"
             )
             await callback.answer()
             return
 
         # Формируем список
-        text = "📊 **Все рейсы** (последние 10):\n\n"
+        text = "📊 <b>Все рейсы</b> (последние 10):\n\n"
 
         status_emoji = {
             'assigned': '⏳',
@@ -1136,7 +1136,7 @@ async def list_trips_callback(callback: CallbackQuery):
         for trip in all_trips[:10]:
             emoji = status_emoji.get(trip['status'], '❓')
             text += (
-                f"{emoji} **{trip['trip_number']}** - {trip['phone']}\n"
+                f"{emoji} <b>{trip['trip_number']}</b> - {trip['phone']}\n"
                 f"   {trip['loading_address'][:30]}...\n"
                 f"   ↓\n"
                 f"   {trip['unloading_address'][:30]}...\n\n"
@@ -1159,7 +1159,7 @@ async def list_trips_callback(callback: CallbackQuery):
         await callback.message.edit_text(
             text,
             reply_markup=kb.as_markup(),
-            parse_mode="Markdown"
+            parse_mode="HTML"
         )
 
         await callback.answer()
@@ -1187,17 +1187,17 @@ async def list_active_trips_callback(callback: CallbackQuery):
             kb.button(text="◀️ Назад", callback_data="back_to_admin")
 
             await callback.message.edit_text(
-                "📋 **Активные рейсы**\n\n"
+                "📋 <b>Активные рейсы</b>\n\n"
                 "Нет активных рейсов.\n\n"
                 "Используйте /create_trip для создания нового рейса.",
                 reply_markup=kb.as_markup(),
-                parse_mode="Markdown"
+                parse_mode="HTML"
             )
             await callback.answer()
             return
 
         # Формируем список
-        text = "📋 **Активные рейсы:**\n\n"
+        text = "📋 <b>Активные рейсы:</b>\n\n"
 
         status_emoji = {
             'assigned': '⏳',
@@ -1210,7 +1210,7 @@ async def list_active_trips_callback(callback: CallbackQuery):
         for trip in active_trips[:10]:
             emoji = status_emoji.get(trip['status'], '❓')
             text += (
-                f"{emoji} **{trip['trip_number']}** - {trip['phone']}\n"
+                f"{emoji} <b>{trip['trip_number']}</b> - {trip['phone']}\n"
                 f"   {trip['loading_address'][:30]}...\n"
                 f"   ↓\n"
                 f"   {trip['unloading_address'][:30]}...\n\n"
@@ -1234,7 +1234,7 @@ async def list_active_trips_callback(callback: CallbackQuery):
         await callback.message.edit_text(
             text,
             reply_markup=kb.as_markup(),
-            parse_mode="Markdown"
+            parse_mode="HTML"
         )
 
         await callback.answer()
@@ -1261,21 +1261,21 @@ async def list_completed_trips_callback(callback: CallbackQuery):
             kb.button(text="◀️ Назад", callback_data="back_to_admin")
 
             await callback.message.edit_text(
-                "✅ **Завершенные рейсы**\n\n"
+                "✅ <b>Завершенные рейсы</b>\n\n"
                 "Нет завершенных рейсов.",
                 reply_markup=kb.as_markup(),
-                parse_mode="Markdown"
+                parse_mode="HTML"
             )
             await callback.answer()
             return
 
         # Формируем список
-        text = "✅ **Завершенные рейсы** (последние 10):\n\n"
+        text = "✅ <b>Завершенные рейсы</b> (последние 10):\n\n"
 
         for trip in completed_trips[:10]:
             completed_date = trip.get('completed_at', '')[:10] if trip.get('completed_at') else 'н/д'
             text += (
-                f"✅ **{trip['trip_number']}** - {trip['phone']}\n"
+                f"✅ <b>{trip['trip_number']}</b> - {trip['phone']}\n"
                 f"   {trip['loading_address'][:30]}... → {trip['unloading_address'][:30]}...\n"
                 f"   Завершен: {completed_date}\n\n"
             )
@@ -1297,7 +1297,7 @@ async def list_completed_trips_callback(callback: CallbackQuery):
         await callback.message.edit_text(
             text,
             reply_markup=kb.as_markup(),
-            parse_mode="Markdown"
+            parse_mode="HTML"
         )
 
         await callback.answer()
@@ -1347,7 +1347,7 @@ async def back_to_admin_callback(callback: CallbackQuery):
 
         # Используем edit_text вместо answer, т.к. это inline callback
         await callback.message.edit_text(
-            "🎛 **Панель управления рейсами**\n\n"
+            "🎛 <b>Панель управления рейсами</b>\n\n"
             f"📊 Статистика:\n"
             f"• ⏳ Назначено: {stats['assigned']}\n"
             f"• 🟢 Активно: {stats['active']}\n"
@@ -1358,7 +1358,7 @@ async def back_to_admin_callback(callback: CallbackQuery):
             f"• 📌 Всего: {stats['total']}\n\n"
             f"Выберите действие:",
             reply_markup=kb.as_markup(),
-            parse_mode="Markdown"
+            parse_mode="HTML"
         )
         await callback.answer()
 
@@ -1394,7 +1394,7 @@ async def trip_history_callback(callback: CallbackQuery):
         # Получаем события
         events = await db_trips.get_trip_events(trip_id, limit=10)
 
-        text = f"📋 **История рейса #{trip['trip_number']}**\n\n"
+        text = f"📋 <b>История рейса #{trip['trip_number']}</b>\n\n"
 
         if not events:
             text += "Нет событий"
@@ -1410,7 +1410,7 @@ async def trip_history_callback(callback: CallbackQuery):
         await callback.message.edit_text(
             text,
             reply_markup=kb.as_markup(),
-            parse_mode="Markdown"
+            parse_mode="HTML"
         )
 
         await callback.answer()
