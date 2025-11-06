@@ -195,15 +195,11 @@ async def process_driver_name(msg: Message, state: FSMContext) -> None:
         # Уведомляем кураторов о новом водителе
         if GROUP_CHAT_ID:
             try:
-                # Получаем нормализованный номер из состояния
-                data = await state.get_data()
-                phone_normalized = data.get('phone', '')
-
                 await msg.bot.send_message(
                     GROUP_CHAT_ID,
                     f"🆕 **Новый водитель зарегистрировался**\n\n"
                     f"👤 {driver_name}\n"
-                    f"📞 {phone_normalized}\n"
+                    f"📞 {phone}\n"
                     f"🆔 User ID: {user_id}\n"
                     f"🕐 {datetime.now().strftime('%d.%m.%Y %H:%M')}",
                     parse_mode="Markdown"
@@ -244,15 +240,11 @@ async def process_driver_name(msg: Message, state: FSMContext) -> None:
         # Уведомляем кураторов
         if GROUP_CHAT_ID:
             try:
-                # Получаем нормализованный номер из состояния
-                data = await state.get_data()
-                phone_normalized = data.get('phone', '')
-
                 await msg.bot.send_message(
                     GROUP_CHAT_ID,
                     f"🆕 **Новый водитель + рейс активирован**\n\n"
                     f"👤 {driver_name}\n"
-                    f"📞 {phone_normalized}\n"
+                    f"📞 {phone}\n"
                     f"🚚 Рейс #{trip['trip_number']}\n"
                     f"🕐 {datetime.now().strftime('%d.%m.%Y %H:%M')}",
                     parse_mode="Markdown"
