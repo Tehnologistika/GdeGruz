@@ -15,6 +15,73 @@ import db_trips
 router = Router()
 logger = logging.getLogger(__name__)
 
+# Константы для групп уведомлений
+CURATOR_GROUP_ID = -1002606502231  # Группа "Куратор Рейса"
+DOCUMENTS_GROUP_ID = -5054329274   # Группа "ГдеГруз Документы"
+
+
+async def send_status_change_notification(bot, trip: dict, old_status: str, new_status: str, user_id: int):
+    """Отправка уведомлений об изменении статуса рейса в группы."""
+    try:
+        from db import get_driver_by_user_id
+
+        # Получаем информацию о водителе
+        driver_info = await get_driver_by_user_id(user_id)
+        driver_name = driver_info.get('name', 'Неизвестный') if driver_info else 'Неизвестный'
+
+        # Словарь статусов для отображения
+        status_names = {
+            'assigned': '⏳ Ожидает активации',
+            'active': '🟢 Активен',
+            'loading': '📦 Погрузка',
+            'in_transit': '🚚 В пути',
+            'unloading': '📥 Выгрузка',
+            'completed': '✅ Завершен',
+            'cancelled': '❌ Отменен'
+        }
+
+        old_status_text = status_names.get(old_status, old_status)
+        new_status_text = status_names.get(new_status, new_status)
+
+        # Формируем сообщение
+        message_text = (
+            f"🔄 <b>Изменение статуса рейса</b>\n\n"
+            f"🚚 Рейс: <b>#{trip['trip_number']}</b>\n"
+            f"👤 Водитель: {driver_name}\n"
+            f"📞 Телефон: {trip['phone']}\n\n"
+            f"📊 Статус: {old_status_text} → {new_status_text}\n\n"
+            f"📍 <b>Маршрут:</b>\n"
+            f"   {trip['loading_address']}\n"
+            f"   ↓\n"
+            f"   {trip['unloading_address']}\n\n"
+            f"📅 Даты: {trip['loading_date']} → {trip['unloading_date']}\n"
+            f"💰 Ставка: {trip['rate']:,.0f} ₽\n\n"
+            f"🕐 Изменено: {datetime.now().strftime('%d.%m.%Y %H:%M')}"
+        )
+
+        # Отправляем в группу "Куратор Рейса"
+        try:
+            await bot.send_message(
+                CURATOR_GROUP_ID,
+                message_text,
+                parse_mode="HTML"
+            )
+        except Exception as e:
+            logger.error(f"Failed to send status change to curator group: {e}")
+
+        # Отправляем в группу "ГдеГруз Документы"
+        try:
+            await bot.send_message(
+                DOCUMENTS_GROUP_ID,
+                message_text,
+                parse_mode="HTML"
+            )
+        except Exception as e:
+            logger.error(f"Failed to send status change to documents group: {e}")
+
+    except Exception as e:
+        logger.error(f"Failed to send status change notification: {e}", exc_info=True)
+
 
 @router.callback_query(F.data.startswith("activate_my_trip:"))
 async def activate_my_trip(callback: CallbackQuery):
@@ -262,7 +329,17 @@ async def set_status(callback: CallbackQuery):
             )
         else:
             # Обычное изменение статуса
+            old_status = trip['status']
             await db_trips.update_trip_status(trip_id, new_status, user_id)
+
+            # Отправляем уведомления в группы
+            await send_status_change_notification(
+                callback.bot,
+                trip,
+                old_status,
+                new_status,
+                user_id
+            )
 
             # Возвращаемся к карточке
             await view_my_trip(callback)
@@ -295,55 +372,22 @@ async def confirm_status(callback: CallbackQuery):
             return
 
         # Обновляем статус
+        old_status = trip['status']
         await db_trips.update_trip_status(trip_id, new_status, user_id)
 
-        # Если завершен - останавливаем отслеживание и отправляем уведомления
+        # Если завершен - останавливаем отслеживание
         if new_status == 'completed':
-            from db import set_active, get_driver_by_user_id
+            from db import set_active
             await set_active(user_id, False)
 
-            # Отправляем уведомления в группы кураторов
-            CURATOR_GROUP_ID = -1002606502231  # Группа "Куратор Рейса"
-            DOCUMENTS_GROUP_ID = -5054329274   # Группа "ГдеГруз Документы"
-
-            # Получаем информацию о водителе
-            driver_info = await get_driver_by_user_id(user_id)
-            driver_name = driver_info.get('name', 'Неизвестный') if driver_info else 'Неизвестный'
-
-            # Формируем сообщение для групп
-            from datetime import datetime
-            completion_message = (
-                f"✅ <b>Рейс завершен водителем</b>\n\n"
-                f"🚚 Рейс: <b>#{trip['trip_number']}</b>\n"
-                f"👤 Водитель: {driver_name}\n"
-                f"📞 Телефон: {trip['phone']}\n\n"
-                f"📍 Маршрут:\n"
-                f"   {trip['loading_address']}\n"
-                f"   ↓\n"
-                f"   {trip['unloading_address']}\n\n"
-                f"📅 Даты: {trip['loading_date']} → {trip['unloading_date']}\n"
-                f"💰 Ставка: {trip['rate']:,.0f} ₽\n\n"
-                f"🕐 Завершен: {datetime.now().strftime('%d.%m.%Y %H:%M')}"
-            )
-
-            # Отправляем в обе группы
-            try:
-                await callback.bot.send_message(
-                    CURATOR_GROUP_ID,
-                    completion_message,
-                    parse_mode="HTML"
-                )
-            except Exception as e:
-                logger.error(f"Failed to send completion message to curator group: {e}")
-
-            try:
-                await callback.bot.send_message(
-                    DOCUMENTS_GROUP_ID,
-                    completion_message,
-                    parse_mode="HTML"
-                )
-            except Exception as e:
-                logger.error(f"Failed to send completion message to documents group: {e}")
+        # Отправляем уведомления в группы
+        await send_status_change_notification(
+            callback.bot,
+            trip,
+            old_status,
+            new_status,
+            user_id
+        )
 
         await callback.message.edit_text(
             f"✅ **Рейс #{trip['trip_number']} завершен!**\n\n"
@@ -597,61 +641,27 @@ async def confirm_driver_complete(callback: CallbackQuery):
             return
 
         # Проверяем права (по телефону)
-        from db import get_phone, set_active, get_driver_by_user_id
+        from db import get_phone, set_active
         driver_phone = await get_phone(user_id)
         if not driver_phone or trip['phone'] != driver_phone:
             await callback.answer("❌ Это не ваш рейс", show_alert=True)
             return
 
         # Завершаем рейс
+        old_status = trip['status']
         await db_trips.update_trip_status(trip_id, 'completed', user_id)
 
         # Останавливаем отслеживание
         await set_active(user_id, False)
 
         # Отправляем уведомления в группы
-        CURATOR_GROUP_ID = -1002606502231  # Группа "Куратор Рейса"
-        DOCUMENTS_GROUP_ID = -5054329274   # Группа "ГдеГруз Документы"
-
-        # Получаем информацию о водителе
-        driver_info = await get_driver_by_user_id(user_id)
-        driver_name = driver_info.get('name', 'Неизвестный') if driver_info else 'Неизвестный'
-
-        # Формируем сообщение для групп
-        from datetime import datetime
-        completion_message = (
-            f"✅ <b>Рейс завершен водителем</b>\n\n"
-            f"🚚 Рейс: <b>#{trip['trip_number']}</b>\n"
-            f"👤 Водитель: {driver_name}\n"
-            f"📞 Телефон: {trip['phone']}\n\n"
-            f"📍 Маршрут:\n"
-            f"   {trip['loading_address']}\n"
-            f"   ↓\n"
-            f"   {trip['unloading_address']}\n\n"
-            f"📅 Даты: {trip['loading_date']} → {trip['unloading_date']}\n"
-            f"💰 Ставка: {trip['rate']:,.0f} ₽\n\n"
-            f"🕐 Завершен: {datetime.now().strftime('%d.%m.%Y %H:%M')}"
+        await send_status_change_notification(
+            callback.bot,
+            trip,
+            old_status,
+            'completed',
+            user_id
         )
-
-        # Отправляем в группу "Куратор Рейса"
-        try:
-            await callback.bot.send_message(
-                CURATOR_GROUP_ID,
-                completion_message,
-                parse_mode="HTML"
-            )
-        except Exception as e:
-            logger.error(f"Failed to notify curator group: {e}")
-
-        # Отправляем в группу "ГдеГруз Документы"
-        try:
-            await callback.bot.send_message(
-                DOCUMENTS_GROUP_ID,
-                completion_message,
-                parse_mode="HTML"
-            )
-        except Exception as e:
-            logger.error(f"Failed to notify documents group: {e}")
 
         # Уведомляем водителя
         await callback.message.edit_text(
