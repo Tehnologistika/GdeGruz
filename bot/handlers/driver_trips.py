@@ -297,10 +297,53 @@ async def confirm_status(callback: CallbackQuery):
         # Обновляем статус
         await db_trips.update_trip_status(trip_id, new_status, user_id)
 
-        # Если завершен - останавливаем отслеживание
+        # Если завершен - останавливаем отслеживание и отправляем уведомления
         if new_status == 'completed':
-            from db import set_active
+            from db import set_active, get_driver_by_user_id
             await set_active(user_id, False)
+
+            # Отправляем уведомления в группы кураторов
+            CURATOR_GROUP_ID = -1002606502231  # Группа "Куратор Рейса"
+            DOCUMENTS_GROUP_ID = -5054329274   # Группа "ГдеГруз Документы"
+
+            # Получаем информацию о водителе
+            driver_info = await get_driver_by_user_id(user_id)
+            driver_name = driver_info.get('name', 'Неизвестный') if driver_info else 'Неизвестный'
+
+            # Формируем сообщение для групп
+            from datetime import datetime
+            completion_message = (
+                f"✅ <b>Рейс завершен водителем</b>\n\n"
+                f"🚚 Рейс: <b>#{trip['trip_number']}</b>\n"
+                f"👤 Водитель: {driver_name}\n"
+                f"📞 Телефон: {trip['phone']}\n\n"
+                f"📍 Маршрут:\n"
+                f"   {trip['loading_address']}\n"
+                f"   ↓\n"
+                f"   {trip['unloading_address']}\n\n"
+                f"📅 Даты: {trip['loading_date']} → {trip['unloading_date']}\n"
+                f"💰 Ставка: {trip['rate']:,.0f} ₽\n\n"
+                f"🕐 Завершен: {datetime.now().strftime('%d.%m.%Y %H:%M')}"
+            )
+
+            # Отправляем в обе группы
+            try:
+                await callback.bot.send_message(
+                    CURATOR_GROUP_ID,
+                    completion_message,
+                    parse_mode="HTML"
+                )
+            except Exception as e:
+                logger.error(f"Failed to send completion message to curator group: {e}")
+
+            try:
+                await callback.bot.send_message(
+                    DOCUMENTS_GROUP_ID,
+                    completion_message,
+                    parse_mode="HTML"
+                )
+            except Exception as e:
+                logger.error(f"Failed to send completion message to documents group: {e}")
 
         await callback.message.edit_text(
             f"✅ **Рейс #{trip['trip_number']} завершен!**\n\n"
@@ -493,7 +536,7 @@ async def complete_trip_button(message: Message):
             )
             return
 
-        # Показываем подтверждение
+        # Показываем подтверждение с полной карточкой рейса
         from aiogram.utils.keyboard import InlineKeyboardBuilder
         kb = InlineKeyboardBuilder()
         kb.button(
@@ -503,13 +546,35 @@ async def complete_trip_button(message: Message):
         kb.button(text="❌ Отмена", callback_data="cancel_complete")
         kb.adjust(1, 1)
 
+        # Статусы для отображения
+        status_emoji = {
+            'active': '🟢',
+            'loading': '📦',
+            'in_transit': '🚚',
+            'unloading': '📥'
+        }
+        status_text = {
+            'active': 'Активен',
+            'loading': 'Погрузка',
+            'in_transit': 'В пути',
+            'unloading': 'Выгрузка'
+        }
+
+        current_status = active_trip.get('status', 'active')
+        emoji = status_emoji.get(current_status, '🚚')
+        status = status_text.get(current_status, 'Активен')
+
         await message.answer(
-            f"⚠️ <b>Завершение рейса #{active_trip['trip_number']}</b>\n\n"
-            f"📍 {active_trip['loading_address']}\n"
-            f"     ↓\n"
-            f"📍 {active_trip['unloading_address']}\n\n"
-            f"Вы уверены, что хотите завершить рейс?\n"
-            f"(Отслеживание местоположения будет остановлено)",
+            f"⚠️ <b>Подтверждение завершения рейса</b>\n\n"
+            f"🚚 <b>Рейс #{active_trip['trip_number']}</b>\n"
+            f"{emoji} Статус: {status}\n\n"
+            f"📍 <b>Погрузка:</b>\n{active_trip['loading_address']}\n"
+            f"📅 {active_trip['loading_date']}\n\n"
+            f"📍 <b>Выгрузка:</b>\n{active_trip['unloading_address']}\n"
+            f"📅 {active_trip['unloading_date']}\n\n"
+            f"💰 <b>Ставка:</b> {active_trip['rate']:,.0f} ₽\n\n"
+            f"❓ <b>Вы уверены, что хотите завершить этот рейс?</b>\n"
+            f"<i>(Отслеживание местоположения будет остановлено)</i>",
             reply_markup=kb.as_markup(),
             parse_mode="HTML"
         )
