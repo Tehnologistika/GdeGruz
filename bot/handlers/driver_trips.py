@@ -455,3 +455,169 @@ async def handle_document(message: Message):
             "❌ Ошибка при отправке документа. Попробуйте еще раз."
         )
 
+
+# ============================================================================
+# Обработчик кнопки "Завершить рейс"
+# ============================================================================
+
+@router.message(F.text == "✅ Завершить рейс")
+async def complete_trip_button(message: Message):
+    """Обработчик кнопки 'Завершить рейс'."""
+    user_id = message.from_user.id
+
+    try:
+        # Получаем телефон водителя
+        from db import get_phone
+        phone = await get_phone(user_id)
+
+        if not phone:
+            await message.answer(
+                "❌ Не удалось определить ваш номер телефона.\n"
+                "Пожалуйста, зарегистрируйтесь снова.",
+                parse_mode="HTML"
+            )
+            return
+
+        # Ищем активный рейс
+        trips = await db_trips.get_trips_by_phone(phone)
+        active_trip = None
+        for trip in trips:
+            if trip.get('status') not in ['completed', 'cancelled']:
+                active_trip = trip
+                break
+
+        if not active_trip:
+            await message.answer(
+                "ℹ️ У вас нет активных рейсов для завершения.",
+                parse_mode="HTML"
+            )
+            return
+
+        # Показываем подтверждение
+        from aiogram.utils.keyboard import InlineKeyboardBuilder
+        kb = InlineKeyboardBuilder()
+        kb.button(
+            text="✅ Да, завершить",
+            callback_data=f"driver_complete:{active_trip['trip_id']}"
+        )
+        kb.button(text="❌ Отмена", callback_data="cancel_complete")
+        kb.adjust(1, 1)
+
+        await message.answer(
+            f"⚠️ <b>Завершение рейса #{active_trip['trip_number']}</b>\n\n"
+            f"📍 {active_trip['loading_address']}\n"
+            f"     ↓\n"
+            f"📍 {active_trip['unloading_address']}\n\n"
+            f"Вы уверены, что хотите завершить рейс?\n"
+            f"(Отслеживание местоположения будет остановлено)",
+            reply_markup=kb.as_markup(),
+            parse_mode="HTML"
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to show complete confirmation: {e}", exc_info=True)
+        await message.answer("❌ Произошла ошибка. Попробуйте позже.")
+
+
+@router.callback_query(F.data.startswith("driver_complete:"))
+async def confirm_driver_complete(callback: CallbackQuery):
+    """Подтверждение завершения рейса водителем."""
+    trip_id = int(callback.data.split(":")[1])
+    user_id = callback.from_user.id
+
+    try:
+        trip = await db_trips.get_trip(trip_id)
+        if not trip:
+            await callback.answer("❌ Рейс не найден", show_alert=True)
+            return
+
+        # Проверяем права (по телефону)
+        from db import get_phone, set_active, get_driver_by_user_id
+        driver_phone = await get_phone(user_id)
+        if not driver_phone or trip['phone'] != driver_phone:
+            await callback.answer("❌ Это не ваш рейс", show_alert=True)
+            return
+
+        # Завершаем рейс
+        await db_trips.update_trip_status(trip_id, 'completed', user_id)
+
+        # Останавливаем отслеживание
+        await set_active(user_id, False)
+
+        # Отправляем уведомления в группы
+        CURATOR_GROUP_ID = -1002606502231  # Группа "Куратор Рейса"
+        DOCUMENTS_GROUP_ID = -5054329274   # Группа "ГдеГруз Документы"
+
+        # Получаем информацию о водителе
+        driver_info = await get_driver_by_user_id(user_id)
+        driver_name = driver_info.get('name', 'Неизвестный') if driver_info else 'Неизвестный'
+
+        # Формируем сообщение для групп
+        from datetime import datetime
+        completion_message = (
+            f"✅ <b>Рейс завершен водителем</b>\n\n"
+            f"🚚 Рейс: <b>#{trip['trip_number']}</b>\n"
+            f"👤 Водитель: {driver_name}\n"
+            f"📞 Телефон: {trip['phone']}\n\n"
+            f"📍 Маршрут:\n"
+            f"   {trip['loading_address']}\n"
+            f"   ↓\n"
+            f"   {trip['unloading_address']}\n\n"
+            f"📅 Даты: {trip['loading_date']} → {trip['unloading_date']}\n"
+            f"💰 Ставка: {trip['rate']:,.0f} ₽\n\n"
+            f"🕐 Завершен: {datetime.now().strftime('%d.%m.%Y %H:%M')}"
+        )
+
+        # Отправляем в группу "Куратор Рейса"
+        try:
+            await callback.bot.send_message(
+                CURATOR_GROUP_ID,
+                completion_message,
+                parse_mode="HTML"
+            )
+        except Exception as e:
+            logger.error(f"Failed to notify curator group: {e}")
+
+        # Отправляем в группу "ГдеГруз Документы"
+        try:
+            await callback.bot.send_message(
+                DOCUMENTS_GROUP_ID,
+                completion_message,
+                parse_mode="HTML"
+            )
+        except Exception as e:
+            logger.error(f"Failed to notify documents group: {e}")
+
+        # Уведомляем водителя
+        await callback.message.edit_text(
+            f"✅ <b>Рейс #{trip['trip_number']} завершен!</b>\n\n"
+            f"Спасибо за работу! 🎉\n\n"
+            f"Отслеживание местоположения остановлено.\n"
+            f"При получении нового рейса вы получите уведомление.",
+            parse_mode="HTML"
+        )
+
+        await callback.answer("✅ Рейс завершен!")
+
+        # Отправляем кнопки
+        from bot.keyboards import location_kb
+        await callback.message.answer(
+            "Используйте кнопки ниже:",
+            reply_markup=location_kb()
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to complete trip: {e}", exc_info=True)
+        await callback.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
+
+
+@router.callback_query(F.data == "cancel_complete")
+async def cancel_complete(callback: CallbackQuery):
+    """Отмена завершения рейса."""
+    await callback.message.edit_text(
+        "❌ Завершение отменено.\n\n"
+        "Рейс остается активным.",
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
