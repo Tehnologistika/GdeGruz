@@ -23,6 +23,8 @@ async def start(message: Message) -> None:
 
     # Проверяем роль пользователя
     if is_curator(user_id):
+        logger.info("User %s is curator, removing reply keyboard", user_id)
+
         # Куратор - сначала удаляем постоянные кнопки
         await message.answer(
             "🔄 Обновление интерфейса...",
@@ -49,6 +51,7 @@ async def start(message: Message) -> None:
             reply_markup=kb.as_markup(),
         )
     else:
+        logger.info("User %s is driver", user_id)
         # Водитель - показываем инструкцию
         await message.answer(
             "Пожалуйста, сначала нажмите «Поделиться номером», а затем «Поделиться местоположением».",
