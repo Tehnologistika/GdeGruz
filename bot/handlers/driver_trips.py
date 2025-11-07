@@ -486,18 +486,6 @@ async def request_documents(message: Message):
 @router.message(F.document | F.photo)
 async def handle_document(message: Message):
     """Обработка полученных документов от водителя."""
-    import os
-
-    # Получаем GROUP_CHAT_ID для отправки кураторам
-    GROUP_CHAT_ID = int(os.getenv("GROUP_CHAT_ID", "0"))
-
-    if not GROUP_CHAT_ID:
-        await message.answer(
-            "❌ Не настроен GROUP_CHAT_ID для отправки документов.\n"
-            "Обратитесь к администратору."
-        )
-        return
-
     try:
         # Получаем информацию о водителе
         from db import get_driver_by_user_id
@@ -506,7 +494,7 @@ async def handle_document(message: Message):
         driver_name = driver_info.get('name', 'Неизвестный') if driver_info else 'Неизвестный'
         driver_phone = driver_info.get('phone', '') if driver_info else ''
 
-        # Формируем caption для куратора
+        # Формируем caption для группы документов
         caption = (
             f"📄 <b>Документ от водителя</b>\n\n"
             f"👤 {driver_name}\n"
@@ -514,17 +502,17 @@ async def handle_document(message: Message):
             f"🆔 User ID: {message.from_user.id}"
         )
 
-        # Пересылаем документ/фото кураторам
+        # Пересылаем документ/фото в группу документов
         if message.document:
             await message.bot.send_document(
-                GROUP_CHAT_ID,
+                DOCUMENTS_GROUP_ID,
                 message.document.file_id,
                 caption=caption,
                 parse_mode="HTML"
             )
         elif message.photo:
             await message.bot.send_photo(
-                GROUP_CHAT_ID,
+                DOCUMENTS_GROUP_ID,
                 message.photo[-1].file_id,  # Берем самое большое фото
                 caption=caption,
                 parse_mode="HTML"
