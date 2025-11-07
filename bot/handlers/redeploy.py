@@ -7,12 +7,13 @@ from aiogram.types import Message
 
 logger = logging.getLogger(__name__)
 
-ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
+# Поддержка нескольких администраторов (через запятую)
+ADMIN_IDS = [int(x) for x in os.getenv("ADMIN_ID", "0").split(",") if x.strip()]
 
 
 async def redeploy(message: Message) -> None:
     """Redeploy the bot container (admin only)."""
-    if not message.from_user or message.from_user.id != ADMIN_ID:
+    if not message.from_user or message.from_user.id not in ADMIN_IDS:
         await message.answer("Unauthorized")
         return
 
