@@ -2,7 +2,8 @@ from aiogram import Router, F, Bot
 from aiogram.types import Message
 
 import os, logging
-from db import save_point, get_phone, is_active
+from db import save_point, get_phone, is_active, get_driver_by_user_id
+import db_trips
 
 logger = logging.getLogger(__name__)
 
@@ -23,14 +24,62 @@ async def handle_location(msg: Message):
 
     await save_point(user_id, lat, lon, ts)
 
-    # дублируем в группу
+    # дублируем в группу с информацией о рейсе
     if GROUP_CHAT_ID:
         bot: Bot = msg.bot
         phone = await get_phone(user_id)
-        caption = f"📞 {phone}" if phone else f"Водитель {user_id}"
+
+        # Получаем информацию о водителе
+        driver = await get_driver_by_user_id(user_id)
+        driver_name = driver.get('name', 'Водитель') if driver else 'Водитель'
+
+        # Формируем информацию о водителе
+        driver_info = f"👤 {driver_name}\n📞 {phone}" if phone else f"👤 {driver_name}\n🆔 {user_id}"
+
+        # Получаем активный рейс
+        active_trip = None
+        if phone:
+            trips = await db_trips.get_trips_by_phone(phone)
+            # Ищем активный рейс (не завершенный)
+            for trip in trips:
+                if trip.get('status') not in ['completed', 'cancelled']:
+                    active_trip = trip
+                    break
+
+        # Формируем сообщение
+        if active_trip:
+            # Статус эмодзи
+            status_map = {
+                'assigned': '⏳ Ожидает активации',
+                'active': '🟢 Активен',
+                'loading': '📦 Погрузка',
+                'in_transit': '🚚 В пути',
+                'unloading': '📥 Выгрузка',
+            }
+            status_text = status_map.get(active_trip['status'], active_trip['status'])
+
+            caption = (
+                f"📍 <b>Местоположение водителя</b>\n\n"
+                f"{driver_info}\n\n"
+                f"🚚 <b>Рейс #{active_trip['trip_number']}</b>\n"
+                f"{status_text}\n\n"
+                f"📍 Погрузка: {active_trip['loading_address']}\n"
+                f"📅 {active_trip['loading_date']}\n\n"
+                f"📍 Выгрузка: {active_trip['unloading_address']}\n"
+                f"📅 {active_trip['unloading_date']}\n\n"
+                f"💰 Ставка: {active_trip['rate']:,.0f} ₽"
+            )
+        else:
+            # Нет активного рейса
+            caption = (
+                f"📍 <b>Местоположение водителя</b>\n\n"
+                f"{driver_info}\n\n"
+                f"ℹ️ Нет активных рейсов"
+            )
+
         try:
             await bot.send_location(GROUP_CHAT_ID, lat, lon, disable_notification=True)
-            await bot.send_message(GROUP_CHAT_ID, caption, disable_notification=True)
+            await bot.send_message(GROUP_CHAT_ID, caption, parse_mode="HTML", disable_notification=True)
         except Exception as e:
             logger.warning("Не удалось отправить точку в группу: %s", e)
 
