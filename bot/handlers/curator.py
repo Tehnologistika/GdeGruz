@@ -531,7 +531,7 @@ async def view_trip_callback(callback: CallbackQuery):
 
         if last_loc:
             from datetime import datetime
-            last_time = datetime.fromisoformat(last_loc['ts'])
+            last_time = last_loc['ts']  # Уже datetime объект
             now = datetime.now()
             delta = now - last_time
 
