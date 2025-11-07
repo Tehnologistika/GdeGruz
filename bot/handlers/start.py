@@ -1,9 +1,9 @@
 import logging
 import os
 
-from aiogram.types import Message, ReplyKeyboardMarkup
+from aiogram.types import Message, ReplyKeyboardRemove
 
-from ..keyboards import main_kb, curator_kb
+from ..keyboards import main_kb
 
 logger = logging.getLogger(__name__)
 
@@ -23,20 +23,24 @@ async def start(message: Message) -> None:
 
     # Проверяем роль пользователя
     if is_curator(user_id):
-        # Куратор - показываем панель управления
+        # Куратор - показываем панель управления (только инлайн кнопки)
+        from aiogram.utils.keyboard import InlineKeyboardBuilder
+
+        kb = InlineKeyboardBuilder()
+        kb.button(text="➕ Создать рейс", callback_data="new_trip")
+        kb.button(text="📋 Активные рейсы", callback_data="list_active_trips")
+        kb.button(text="🎛 Панель управления", callback_data="back_to_admin")
+        kb.adjust(1)
+
         await message.answer(
             "🎛 <b>Панель куратора рейсов</b>\n\n"
             "Добро пожаловать в систему управления рейсами ГдеГруз!\n\n"
-            "Доступные команды:\n"
-            "➕ <b>Создать рейс</b> - создать новый рейс для водителя\n"
-            "📋 <b>Активные рейсы</b> - просмотр текущих рейсов\n"
-            "🎛 <b>Панель управления</b> - статистика и управление\n\n"
-            "Используйте команды:\n"
+            "Используйте кнопки ниже или команды:\n"
             "/admin - панель управления\n"
             "/trips - список рейсов\n"
             "/create_trip - создать рейс",
             parse_mode="HTML",
-            reply_markup=curator_kb(),
+            reply_markup=kb.as_markup(),
         )
     else:
         # Водитель - показываем инструкцию
