@@ -10,10 +10,15 @@ logger = logging.getLogger(__name__)
 # Telegram ID кураторов (из переменных окружения)
 CURATOR_IDS = [int(x) for x in os.getenv("CURATOR_IDS", "").split(",") if x]
 
+# Логируем при загрузке модуля
+logger.info("CURATOR_IDS loaded: %s", CURATOR_IDS)
+
 
 def is_curator(user_id: int) -> bool:
     """Проверка, является ли пользователь куратором."""
-    return user_id in CURATOR_IDS
+    result = user_id in CURATOR_IDS
+    logger.info("is_curator(%s) = %s (CURATOR_IDS: %s)", user_id, result, CURATOR_IDS)
+    return result
 
 
 async def start(message: Message) -> None:
