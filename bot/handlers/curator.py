@@ -27,6 +27,24 @@ CURATOR_IDS = [int(x) for x in os.getenv("CURATOR_IDS", "").split(",") if x]
 GROUP_CHAT_ID = int(os.getenv("GROUP_CHAT_ID", "0"))
 
 
+async def get_driver_name_by_phone(phone: str) -> str:
+    """
+    Получить имя водителя по номеру телефона.
+
+    Args:
+        phone: Номер телефона водителя
+
+    Returns:
+        str: Имя водителя или пустая строка если не найден
+    """
+    from db import get_driver_by_phone
+
+    driver = await get_driver_by_phone(phone)
+    if driver and driver.get('name'):
+        return driver['name']
+    return ""
+
+
 def is_curator(user_id: int) -> bool:
     """Проверка, является ли пользователь куратором."""
     return user_id in CURATOR_IDS
@@ -329,11 +347,15 @@ async def process_trip_data(message: Message, state: FSMContext):
             status_text = "⚠️ Водитель не зарегистрирован в боте"
             warning = "\n\n⚠️ Водитель должен запустить бота и поделиться номером."
 
+        # Получаем имя водителя
+        driver_name = await get_driver_name_by_phone(phone)
+        driver_info = f"👤 {driver_name}\n📞 {phone}" if driver_name else f"📞 {phone}"
+
         # Отправляем куратору
         await message.answer(
             f"✅ <b>Рейс создан!</b>\n\n"
             f"🚚 Рейс <b>#{trip_number}</b>\n"
-            f"📞 Водитель: {phone}\n"
+            f"{driver_info}\n"
             f"📍 {loading_address}\n"
             f"     ↓\n"
             f"📍 {unloading_address}\n"
@@ -352,7 +374,7 @@ async def process_trip_data(message: Message, state: FSMContext):
                     GROUP_CHAT_ID,
                     f"🆕 <b>Создан новый рейс</b>\n\n"
                     f"🚚 Рейс #{trip_number}\n"
-                    f"📞 {phone}\n"
+                    f"{driver_info}\n"
                     f"📍 {loading_address} → {unloading_address}\n"
                     f"📅 {loading_date} → {unloading_date}\n"
                     f"💰 {rate_float:,.0f} ₽\n\n"
@@ -438,6 +460,10 @@ async def activate_trip_callback(callback: CallbackQuery):
         # Активируем
         await db_trips.activate_trip(trip_id, callback.from_user.id)
 
+        # Получаем имя водителя
+        driver_name = await get_driver_name_by_phone(trip['phone'])
+        driver_info = f"👤 {driver_name}\n📞 {trip['phone']}" if driver_name else f"📞 {trip['phone']}"
+
         # Обновляем сообщение
         kb = InlineKeyboardBuilder()
         kb.button(text="✏️ Редактировать", callback_data=f"edit_trip:{trip_id}")
@@ -448,7 +474,7 @@ async def activate_trip_callback(callback: CallbackQuery):
         await callback.message.edit_text(
             f"✅ <b>Рейс активирован!</b>\n\n"
             f"🚚 Рейс #{trip['trip_number']}\n"
-            f"📞 {trip['phone']}\n"
+            f"{driver_info}\n"
             f"📍 {trip['loading_address']} → {trip['unloading_address']}\n"
             f"📅 {trip['loading_date']} → {trip['unloading_date']}\n"
             f"💰 {trip['rate']:,.0f} ₽\n\n"
@@ -529,6 +555,10 @@ async def view_trip_callback(callback: CallbackQuery):
         }
         status_text = status_map.get(trip['status'], trip['status'])
 
+        # Получаем имя водителя
+        driver_name = await get_driver_name_by_phone(trip['phone'])
+        driver_info = f"👤 {driver_name}\n📞 {trip['phone']}" if driver_name else f"📞 Водитель: {trip['phone']}"
+
         # Формируем кнопки
         kb = InlineKeyboardBuilder()
         kb.button(text="✏️ Редактировать", callback_data=f"edit_trip:{trip_id}")
@@ -544,7 +574,7 @@ async def view_trip_callback(callback: CallbackQuery):
         await callback.message.edit_text(
             f"🚚 <b>Рейс #{trip['trip_number']}</b>\n"
             f"{status_text}\n\n"
-            f"📞 Водитель: {trip['phone']}\n"
+            f"{driver_info}\n"
             f"📍 {trip['loading_address']}\n"
             f"     ↓\n"
             f"📍 {trip['unloading_address']}\n"
@@ -585,6 +615,10 @@ async def request_location_callback(callback: CallbackQuery):
             )
             return
 
+        # Получаем имя водителя
+        driver_name = await get_driver_name_by_phone(trip['phone'])
+        driver_info = f"👤 {driver_name}\n📞 {trip['phone']}" if driver_name else f"📞 {trip['phone']}"
+
         # Формируем кнопки подтверждения
         kb = InlineKeyboardBuilder()
         kb.button(text="✅ Отправить", callback_data=f"confirm_location:{trip_id}")
@@ -596,7 +630,7 @@ async def request_location_callback(callback: CallbackQuery):
             f"Отправить водителю напоминание\n"
             f"о необходимости поделиться\n"
             f"местоположением?\n\n"
-            f"📞 {trip['phone']}\n"
+            f"{driver_info}\n"
             f"🚚 Рейс #{trip['trip_number']}",
             reply_markup=kb.as_markup(),
             parse_mode="HTML"
@@ -834,8 +868,12 @@ async def list_trips_callback(callback: CallbackQuery):
 
         for trip in all_trips[:10]:
             emoji = status_emoji.get(trip['status'], '❓')
+            # Получаем имя водителя
+            driver_name = await get_driver_name_by_phone(trip['phone'])
+            driver_display = f"{driver_name} ({trip['phone']})" if driver_name else trip['phone']
+
             text += (
-                f"{emoji} <b>{trip['trip_number']}</b> - {trip['phone']}\n"
+                f"{emoji} <b>{trip['trip_number']}</b> - {driver_display}\n"
                 f"   {trip['loading_address'][:30]}...\n"
                 f"   ↓\n"
                 f"   {trip['unloading_address'][:30]}...\n\n"
@@ -973,8 +1011,12 @@ async def list_completed_trips_callback(callback: CallbackQuery):
 
         for trip in completed_trips[:10]:
             completed_date = trip.get('completed_at', '')[:10] if trip.get('completed_at') else 'н/д'
+            # Получаем имя водителя
+            driver_name = await get_driver_name_by_phone(trip['phone'])
+            driver_display = f"{driver_name} ({trip['phone']})" if driver_name else trip['phone']
+
             text += (
-                f"✅ <b>{trip['trip_number']}</b> - {trip['phone']}\n"
+                f"✅ <b>{trip['trip_number']}</b> - {driver_display}\n"
                 f"   {trip['loading_address'][:30]}... → {trip['unloading_address'][:30]}...\n"
                 f"   Завершен: {completed_date}\n\n"
             )
@@ -1186,6 +1228,10 @@ async def edit_trip_callback(callback: CallbackQuery):
             await callback.answer("❌ Рейс не найден", show_alert=True)
             return
 
+        # Получаем имя водителя
+        driver_name = await get_driver_name_by_phone(trip['phone'])
+        driver_info = f"👤 {driver_name}\n📞 {trip['phone']}" if driver_name else f"📞 {trip['phone']}"
+
         # Формируем меню редактирования
         kb = InlineKeyboardBuilder()
         kb.button(text="📞 Изменить телефон", callback_data=f"edit_field:phone:{trip_id}")
@@ -1197,7 +1243,7 @@ async def edit_trip_callback(callback: CallbackQuery):
 
         await callback.message.edit_text(
             f"✏️ <b>Редактирование рейса #{trip['trip_number']}</b>\n\n"
-            f"📞 Телефон: {trip['phone']}\n"
+            f"{driver_info}\n"
             f"📍 Загрузка: {trip['loading_address']}\n"
             f"📍 Выгрузка: {trip['unloading_address']}\n"
             f"📅 Даты: {trip['loading_date']} → {trip['unloading_date']}\n"
