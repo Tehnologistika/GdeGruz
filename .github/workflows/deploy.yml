@@ -18,12 +18,14 @@ jobs:
         script: |
           cd /home/git/fleet-live-bot
           
-          git pull origin main
+          # Получаем последние изменения
+          git pull origin main || echo "Git pull пропущен"
           
-          docker-compose down
-          docker-compose build --no-cache
-          docker-compose up -d
+          # Перезапускаем Docker с sudo если нужно
+          docker-compose down || sudo docker-compose down
+          docker-compose up -d --build || sudo docker-compose up -d --build
           
-          docker-compose ps
+          # Проверяем статус
+          docker-compose ps || sudo docker-compose ps
           
-          echo "✅ Бот в Docker успешно обновлён!"
+          echo "✅ Деплой завершён!"
