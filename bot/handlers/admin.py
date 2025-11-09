@@ -15,17 +15,10 @@ import logging
 import db_trips
 import db_documents
 from db import get_phone
+from bot.utils import is_curator  # Импортируем is_curator из utils
 
 router = Router()
 logger = logging.getLogger(__name__)
-
-# Список ID кураторов с правами доступа
-CURATOR_IDS = [5799866832, 6835069941]
-
-
-def is_curator(user_id: int) -> bool:
-    """Проверка, является ли пользователь куратором."""
-    return user_id in CURATOR_IDS
 
 
 class CreateTripStates(StatesGroup):
