@@ -24,6 +24,8 @@ jobs:
           docker-compose up -d --build
           
           docker-compose ps
+
+          echo "Деплой завершён успешно"
           
           echo "✅ Деплой завершён!"
           
