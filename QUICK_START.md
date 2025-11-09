@@ -51,7 +51,7 @@ sqlite3 data/trips.db "DELETE FROM sqlite_sequence WHERE name='trips';"
 # Проверка флага очистки БД
 if [ -f ".cleanup_db_on_deploy" ]; then
     echo "🧹 Обнаружен флаг очистки БД..."
-    docker compose run --rm bot python cleanup_test_data.py
+    docker-compose run --rm bot python cleanup_test_data.py
     if [ $? -eq 0 ]; then
         rm -f ".cleanup_db_on_deploy"
         echo "✅ БД очищена"
@@ -77,9 +77,9 @@ script: |
 cat .env | grep CURATOR_IDS
 
 # Посмотреть логи проверки ролей
-docker compose logs bot --tail 100 | grep "Role check"
+docker-compose logs bot --tail 100 | grep "Role check"
 ```
 
 ## Полная документация
 
-См. файл `ТЕХНИЧЕСКОЕ_ЗАДАНИЕ.md`
+См. файл `TECHNICAL_SPECIFICATION.md`
