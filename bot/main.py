@@ -29,6 +29,7 @@ from bot.handlers.redeploy import redeploy
 from bot.handlers.curator import router as curator_router
 from bot.handlers.driver_trips import router as driver_trips_router
 from db import get_phone, is_active
+from bot.utils import is_curator
 
 # === intervals (in hours) ===
 REMIND_HOURS = float(os.getenv("REMIND_HOURS", "0.2"))  # default 0.2 h ≈ 12 min
@@ -54,6 +55,7 @@ ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 # FIX 1: Трекинг отправленных эскалаций (чтобы не спамить)
 # ============================================================================
 escalation_sent = {}  # {user_id: timestamp когда отправили эскалацию}
+escalation_lock = asyncio.Lock()  # Защита от race conditions
 
 
 async def remind_every_12h(bot: Bot) -> None:
@@ -85,6 +87,11 @@ async def remind_every_12h(bot: Bot) -> None:
             continue
 
         for uid in user_ids:
+            # FIX: Пропускаем кураторов - им не нужны напоминания о местоположении
+            if is_curator(uid):
+                logger.debug("Skipping curator %s from location reminders", uid)
+                continue
+
             try:
                 point = await db.get_last_point(uid)
             except Exception:
@@ -119,40 +126,46 @@ async def remind_every_12h(bot: Bot) -> None:
             # 2. Эскалация в группу (>REMIND_HOURS + 2 h)
             # FIX 4: Отправляем эскалацию только ОДИН РАЗ
             if time_since_last > ESCALATE_DELAY and GROUP_CHAT_ID:
-                # Проверяем, не отправляли ли уже эскалацию
-                last_escalation = escalation_sent.get(uid)
+                # Используем lock для безопасного доступа к escalation_sent
+                async with escalation_lock:
+                    # Проверяем, не отправляли ли уже эскалацию
+                    last_escalation = escalation_sent.get(uid)
 
-                # Отправляем эскалацию, если:
-                # - ещё не отправляли OR
-                # - с последней эскалации прошло >12 часов (чтобы напомнить снова)
-                should_escalate = last_escalation is None or (
-                    now - last_escalation
-                ) > timedelta(hours=12)
+                    # Отправляем эскалацию, если:
+                    # - ещё не отправляли OR
+                    # - с последней эскалации прошло >12 часов (чтобы напомнить снова)
+                    should_escalate = last_escalation is None or (
+                        now - last_escalation
+                    ) > timedelta(hours=12)
 
-                if should_escalate:
-                    logger.info("Escalating: no coords from %s since %s", uid, last_ts)
-                    phone = await get_phone(uid)
-                    caption = (
-                        f"⚠️ Нет координат от водителя 📞 {phone} с {last_ts:%d.%m %H:%M} UTC"
-                        if phone
-                        else f"⚠️ Нет координат от водителя {uid} с {last_ts:%d.%m %H:%M} UTC"
-                    )
-                    try:
-                        await bot.send_message(GROUP_CHAT_ID, caption)
-                        escalation_sent[uid] = now  # Запоминаем время эскалации
-                    except Exception as e:
-                        logger.warning("Не удалось отправить эскалацию: %s", e)
+                    if should_escalate:
+                        logger.info("Escalating: no coords from %s since %s", uid, last_ts)
+                        phone = await get_phone(uid)
+                        caption = (
+                            f"⚠️ Нет координат от водителя 📞 {phone} с {last_ts:%d.%m %H:%M} UTC"
+                            if phone
+                            else f"⚠️ Нет координат от водителя {uid} с {last_ts:%d.%m %H:%M} UTC"
+                        )
+                        try:
+                            await bot.send_message(GROUP_CHAT_ID, caption)
+                            escalation_sent[uid] = now  # Запоминаем время эскалации
+                        except Exception as e:
+                            logger.warning("Не удалось отправить эскалацию: %s", e)
 
             # FIX 5: Очищаем трекинг эскалации, если водитель снова активен
             if time_since_last <= timedelta(hours=REMIND_HOURS):
-                escalation_sent.pop(uid, None)
+                async with escalation_lock:
+                    escalation_sent.pop(uid, None)
 
         # FIX 6: Очищаем старые записи эскалаций (>24 часов)
-        cutoff_time = now - timedelta(hours=24)
-        escalation_sent = {
-            uid: ts for uid, ts in escalation_sent.items()
-            if ts > cutoff_time
-        }
+        async with escalation_lock:
+            cutoff_time = now - timedelta(hours=24)
+            escalation_sent_copy = {
+                uid: ts for uid, ts in escalation_sent.items()
+                if ts > cutoff_time
+            }
+            escalation_sent.clear()
+            escalation_sent.update(escalation_sent_copy)
 
         await asyncio.sleep(max(int(REMIND_HOURS * 60), 2) * 60)
 
