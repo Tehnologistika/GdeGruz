@@ -1,4 +1,4 @@
-name: Auto-merge Claude branches
+name: Auto-create PR for Claude branches
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
   pull-requests: write
 
 jobs:
-  auto-merge:
+  create-pr:
     runs-on: ubuntu-latest
 
     steps:
@@ -18,12 +18,6 @@ jobs:
       uses: actions/checkout@v3
       with:
         fetch-depth: 0
-        token: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Configure Git
-      run: |
-        git config user.name "GitHub Actions Bot"
-        git config user.email "actions@github.com"
 
     - name: Get branch name
       id: branch
@@ -37,13 +31,14 @@ jobs:
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # Проверяем существующий PR для этой ветки
-        PR_NUMBER=$(gh pr list --head "${{ steps.branch.outputs.name }}" --json number --jq '.[0].number')
+        PR_NUMBER=$(gh pr list --head "${{ steps.branch.outputs.name }}" --base main --json number --jq '.[0].number // empty')
 
         if [ -n "$PR_NUMBER" ]; then
           echo "exists=true" >> $GITHUB_OUTPUT
           echo "number=$PR_NUMBER" >> $GITHUB_OUTPUT
-          echo "✅ PR #$PR_NUMBER уже существует"
+          PR_URL=$(gh pr view "$PR_NUMBER" --json url --jq '.url')
+          echo "url=$PR_URL" >> $GITHUB_OUTPUT
+          echo "✅ PR #$PR_NUMBER уже существует: $PR_URL"
         else
           echo "exists=false" >> $GITHUB_OUTPUT
           echo "ℹ️ PR не найден, будет создан новый"
@@ -56,67 +51,59 @@ jobs:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         # Получаем последний коммит для title
-        COMMIT_MSG=$(git log -1 --pretty=%B)
+        COMMIT_MSG=$(git log -1 --pretty=%B | head -1)
 
         # Создаем PR
         PR_URL=$(gh pr create \
           --base main \
           --head "${{ steps.branch.outputs.name }}" \
-          --title "🤖 Auto-deploy: ${COMMIT_MSG:0:60}" \
+          --title "🤖 ${COMMIT_MSG}" \
           --body "## Автоматический деплой через Claude Code
 
-        **Ветка:** \`${{ steps.branch.outputs.name }}\`
-        **Коммиты:** $(git rev-list --count origin/main..${{ steps.branch.outputs.name }})
+**Ветка:** \`${{ steps.branch.outputs.name }}\`
 
-        ### Изменения:
+### Изменения:
 
-        \`\`\`
-        $COMMIT_MSG
-        \`\`\`
+\`\`\`
+$(git log -1 --pretty=%B)
+\`\`\`
 
-        ---
+---
 
-        ✅ Этот PR будет автоматически смержен в \`main\` и задеплоен на сервер.
-        " \
-          --assignee @me)
+### 👉 Следующий шаг:
+Нажмите **\"Merge pull request\"** чтобы задеплоить на сервер
+
+После merge автоматически:
+- ✅ Запустится деплой на Timeweb сервер
+- ✅ Docker контейнеры пересоберутся
+- ✅ База данных очистится (если есть флаг .cleanup_db_on_deploy)
+- ✅ Бот перезапустится с новым кодом
+")
 
         echo "url=$PR_URL" >> $GITHUB_OUTPUT
         echo "✅ PR создан: $PR_URL"
 
-    - name: Merge Pull Request
-      env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: |
-        # Получаем номер PR
-        if [ "${{ steps.check_pr.outputs.exists }}" == "true" ]; then
-          PR_NUMBER="${{ steps.check_pr.outputs.number }}"
-        else
-          # Ждем немного чтобы PR точно создался
-          sleep 5
-          PR_NUMBER=$(gh pr list --head "${{ steps.branch.outputs.name }}" --json number --jq '.[0].number')
-        fi
-
-        echo "🔄 Мержим PR #$PR_NUMBER в main..."
-
-        # Мержим PR
-        gh pr merge "$PR_NUMBER" \
-          --merge \
-          --auto \
-          --delete-branch \
-          || echo "⚠️ PR уже смержен или есть конфликты"
-
-        echo "✅ PR #$PR_NUMBER смержен в main"
-        echo "🚀 GitHub Actions автоматически запустит деплой на сервер..."
-
     - name: Summary
       run: |
-        echo "## 🎉 Автоматический деплой запущен!" >> $GITHUB_STEP_SUMMARY
+        if [ "${{ steps.check_pr.outputs.exists }}" == "true" ]; then
+          echo "## ℹ️ Pull Request уже существует" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📋 **PR URL:** ${{ steps.check_pr.outputs.url }}" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "## ✅ Pull Request создан!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📋 **PR URL:** ${{ steps.create_pr.outputs.url }}" >> $GITHUB_STEP_SUMMARY
+        fi
+
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "✅ Ветка \`${{ steps.branch.outputs.name }}\` смержена в \`main\`" >> $GITHUB_STEP_SUMMARY
-        echo "🚀 Деплой на сервер начнется автоматически через несколько секунд" >> $GITHUB_STEP_SUMMARY
+        echo "### 👉 Следующий шаг:" >> $GITHUB_STEP_SUMMARY
+        echo "1. Откройте PR по ссылке выше" >> $GITHUB_STEP_SUMMARY
+        echo "2. Нажмите зеленую кнопку **\"Merge pull request\"**" >> $GITHUB_STEP_SUMMARY
+        echo "3. Подтвердите нажав **\"Confirm merge\"**" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### Что произойдет дальше:" >> $GITHUB_STEP_SUMMARY
-        echo "1. GitHub Actions запустит workflow \`Auto Deploy Bot\`" >> $GITHUB_STEP_SUMMARY
-        echo "2. Код будет задеплоен на Timeweb сервер" >> $GITHUB_STEP_SUMMARY
-        echo "3. Docker контейнеры пересоберутся" >> $GITHUB_STEP_SUMMARY
-        echo "4. Бот автоматически перезапустится" >> $GITHUB_STEP_SUMMARY
+        echo "### 🚀 Что произойдет после merge:" >> $GITHUB_STEP_SUMMARY
+        echo "- GitHub Actions автоматически запустит деплой" >> $GITHUB_STEP_SUMMARY
+        echo "- Код задеплоится на Timeweb сервер" >> $GITHUB_STEP_SUMMARY
+        echo "- Docker контейнеры пересоберутся" >> $GITHUB_STEP_SUMMARY
+        echo "- База данных очистится от тестовых данных" >> $GITHUB_STEP_SUMMARY
+        echo "- Бот перезапустится с новым кодом" >> $GITHUB_STEP_SUMMARY
