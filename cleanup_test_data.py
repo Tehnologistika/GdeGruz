@@ -25,10 +25,32 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Пути к базам данных
-DATA_DIR = Path(__file__).parent / "data"
-TRIPS_DB = DATA_DIR / "trips.db"
-DOCUMENTS_DB = DATA_DIR / "documents.db"
-POINTS_DB = DATA_DIR / "points.db"
+# Ищем в текущей директории или в data/
+BASE_DIR = Path(__file__).parent
+DATA_DIR = BASE_DIR / "data"
+
+# Проверяем разные возможные пути
+def find_db_path(db_name: str) -> Path:
+    """Находит путь к базе данных."""
+    possible_paths = [
+        DATA_DIR / db_name,  # ./data/trips.db
+        BASE_DIR / db_name,  # ./trips.db
+        Path("/app/data") / db_name,  # Docker: /app/data/trips.db
+        Path("/app") / db_name,  # Docker: /app/trips.db
+    ]
+
+    for path in possible_paths:
+        if path.exists():
+            logger.info(f"✅ Найдена БД: {path}")
+            return path
+
+    # Возвращаем путь по умолчанию
+    logger.warning(f"⚠️ БД {db_name} не найдена, используется путь по умолчанию: {DATA_DIR / db_name}")
+    return DATA_DIR / db_name
+
+TRIPS_DB = find_db_path("trips.db")
+DOCUMENTS_DB = find_db_path("documents.db")
+POINTS_DB = find_db_path("points.db")
 
 
 async def cleanup_trips():
@@ -36,6 +58,8 @@ async def cleanup_trips():
     if not TRIPS_DB.exists():
         logger.warning(f"База данных {TRIPS_DB} не найдена, пропускаем")
         return 0
+
+    logger.info(f"📂 Открываем БД: {TRIPS_DB}")
 
     async with aiosqlite.connect(TRIPS_DB) as db:
         # Подсчитываем количество рейсов перед удалением
@@ -46,19 +70,52 @@ async def cleanup_trips():
             logger.info("✅ Рейсов в базе нет, очистка не требуется")
             return 0
 
-        # Удаляем все рейсы
-        await db.execute("DELETE FROM trips")
+        logger.info(f"🔍 Найдено рейсов для удаления: {count}")
+
+        # Показываем статистику по статусам
+        try:
+            async with db.execute("SELECT status, COUNT(*) FROM trips GROUP BY status") as cursor:
+                rows = await cursor.fetchall()
+                for status, cnt in rows:
+                    logger.info(f"  • {status}: {cnt} рейс(ов)")
+        except Exception as e:
+            logger.warning(f"Не удалось получить статистику: {e}")
+
+        # Удаляем ВСЕ рейсы (без фильтров!)
+        logger.info("🗑️  Удаляем ВСЕ рейсы...")
+        result = await db.execute("DELETE FROM trips")
+        logger.info(f"  Удалено строк: {result.rowcount if hasattr(result, 'rowcount') else 'N/A'}")
 
         # Очищаем события рейсов (если таблица существует)
         try:
-            await db.execute("DELETE FROM trip_events")
-            logger.info("  - Очищена таблица trip_events")
+            async with db.execute("SELECT COUNT(*) FROM trip_events") as cursor:
+                events_count = (await cursor.fetchone())[0]
+
+            if events_count > 0:
+                await db.execute("DELETE FROM trip_events")
+                logger.info(f"  • Удалено {events_count} событий из trip_events")
         except aiosqlite.OperationalError:
             # Таблица может не существовать
+            logger.debug("  • Таблица trip_events не найдена (это нормально)")
+
+        # Сбрасываем автоинкремент
+        try:
+            await db.execute("DELETE FROM sqlite_sequence WHERE name='trips'")
+            logger.info("  • Сброшен счетчик автоинкремента")
+        except Exception:
             pass
 
         await db.commit()
-        logger.info(f"✅ Удалено {count} рейсов из trips.db")
+
+        # Проверяем что действительно все удалено
+        async with db.execute("SELECT COUNT(*) FROM trips") as cursor:
+            remaining = (await cursor.fetchone())[0]
+
+        if remaining == 0:
+            logger.info(f"✅ Успешно удалено {count} рейсов из {TRIPS_DB}")
+        else:
+            logger.error(f"❌ ОШИБКА! Осталось {remaining} рейсов после очистки!")
+
         return count
 
 
