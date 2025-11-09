@@ -1,0 +1,112 @@
+name: Auto-create PR for Claude branches
+
+on:
+  push:
+    branches:
+      - 'claude/**'
+
+# Не запускать на pull_request events
+# (только на push в ветки claude/*)
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  create-pr:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+
+    - name: Get branch name
+      id: branch
+      run: |
+        BRANCH_NAME="${GITHUB_REF#refs/heads/}"
+        echo "name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+        echo "📝 Current branch: $BRANCH_NAME"
+
+    - name: Check if PR exists
+      id: check_pr
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        PR_NUMBER=$(gh pr list --head "${{ steps.branch.outputs.name }}" --base main --json number --jq '.[0].number // empty')
+
+        if [ -n "$PR_NUMBER" ]; then
+          echo "exists=true" >> $GITHUB_OUTPUT
+          echo "number=$PR_NUMBER" >> $GITHUB_OUTPUT
+          PR_URL=$(gh pr view "$PR_NUMBER" --json url --jq '.url')
+          echo "url=$PR_URL" >> $GITHUB_OUTPUT
+          echo "✅ PR #$PR_NUMBER уже существует: $PR_URL"
+        else
+          echo "exists=false" >> $GITHUB_OUTPUT
+          echo "ℹ️ PR не найден, будет создан новый"
+        fi
+
+    - name: Create Pull Request
+      if: steps.check_pr.outputs.exists == 'false'
+      id: create_pr
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        # Получаем последний коммит для title
+        COMMIT_MSG=$(git log -1 --pretty=%B | head -1)
+
+        # Создаем PR
+        PR_URL=$(gh pr create \
+          --base main \
+          --head "${{ steps.branch.outputs.name }}" \
+          --title "🤖 ${COMMIT_MSG}" \
+          --body "## Автоматический деплой через Claude Code
+
+**Ветка:** \`${{ steps.branch.outputs.name }}\`
+
+### Изменения:
+
+\`\`\`
+$(git log -1 --pretty=%B)
+\`\`\`
+
+---
+
+### 👉 Следующий шаг:
+Нажмите **\"Merge pull request\"** чтобы задеплоить на сервер
+
+После merge автоматически:
+- ✅ Запустится деплой на Timeweb сервер
+- ✅ Docker контейнеры пересоберутся
+- ✅ База данных очистится (если есть флаг .cleanup_db_on_deploy)
+- ✅ Бот перезапустится с новым кодом
+")
+
+        echo "url=$PR_URL" >> $GITHUB_OUTPUT
+        echo "✅ PR создан: $PR_URL"
+
+    - name: Summary
+      run: |
+        if [ "${{ steps.check_pr.outputs.exists }}" == "true" ]; then
+          echo "## ℹ️ Pull Request уже существует" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📋 **PR URL:** ${{ steps.check_pr.outputs.url }}" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "## ✅ Pull Request создан!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📋 **PR URL:** ${{ steps.create_pr.outputs.url }}" >> $GITHUB_STEP_SUMMARY
+        fi
+
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 👉 Следующий шаг:" >> $GITHUB_STEP_SUMMARY
+        echo "1. Откройте PR по ссылке выше" >> $GITHUB_STEP_SUMMARY
+        echo "2. Нажмите зеленую кнопку **\"Merge pull request\"**" >> $GITHUB_STEP_SUMMARY
+        echo "3. Подтвердите нажав **\"Confirm merge\"**" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 🚀 Что произойдет после merge:" >> $GITHUB_STEP_SUMMARY
+        echo "- GitHub Actions автоматически запустит деплой" >> $GITHUB_STEP_SUMMARY
+        echo "- Код задеплоится на Timeweb сервер" >> $GITHUB_STEP_SUMMARY
+        echo "- Docker контейнеры пересоберутся" >> $GITHUB_STEP_SUMMARY
+        echo "- База данных очистится от тестовых данных" >> $GITHUB_STEP_SUMMARY
+        echo "- Бот перезапустится с новым кодом" >> $GITHUB_STEP_SUMMARY
